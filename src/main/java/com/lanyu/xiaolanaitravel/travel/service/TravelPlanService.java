@@ -95,4 +95,19 @@ public class TravelPlanService {
                 .orderByDesc(TravelPlan::getCreateTime);
         return travelPlanMapper.selectList(wrapper);
     }
+
+    /**
+     * 查询当前登录用户自己的单个旅行计划。
+     */
+    public TravelPlan getMyPlanById(Long userId, Long planId) {
+        LambdaQueryWrapper<TravelPlan> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(TravelPlan::getId, planId)
+                .eq(TravelPlan::getUserId, userId);
+
+        TravelPlan plan = travelPlanMapper.selectOne(wrapper);
+        if (plan == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "旅行计划不存在");
+        }
+        return plan;
+    }
 }

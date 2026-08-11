@@ -47,4 +47,14 @@ public class TravelPlanController {
             @RequestAttribute("currentUserId") Long userId) {
         return travelPlanService.getMyPlans(userId);
     }
+
+    /**
+     * 查看当前登录用户自己的单个旅行计划。
+     */
+    @GetMapping("/{id}")
+    public TravelPlan getMyPlanById(
+            @RequestAttribute("currentUserId") Long userId,
+            @PathVariable Long id) {
+        return travelPlanService.getMyPlanById(userId, id);
+    }
 }

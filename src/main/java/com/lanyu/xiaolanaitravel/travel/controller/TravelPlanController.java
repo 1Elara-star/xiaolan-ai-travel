@@ -8,6 +8,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 /**
  * 旅行计划接口
  */
@@ -35,5 +37,14 @@ public class TravelPlanController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(plan);
+    }
+
+    /**
+     * 查询当前登录用户自己的旅行计划。
+     */
+    @GetMapping("/my")
+    public List<TravelPlan> getMyPlans(
+            @RequestAttribute("currentUserId") Long userId) {
+        return travelPlanService.getMyPlans(userId);
     }
 }

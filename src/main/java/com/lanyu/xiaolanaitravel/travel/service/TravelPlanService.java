@@ -1,5 +1,6 @@
 package com.lanyu.xiaolanaitravel.travel.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanRequest;
 import com.lanyu.xiaolanaitravel.travel.entity.TravelPlan;
 import com.lanyu.xiaolanaitravel.travel.mapper.TravelPlanMapper;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 /**
  * 旅行计划业务逻辑
@@ -79,5 +81,18 @@ public class TravelPlanService {
 
         // 5. 返回创建后的旅行计划
         return plan;
+    }
+
+    /**
+     * 查询当前登录用户自己的旅行计划。
+     *
+     * userId 由 JWT 提供，查询条件由后端控制，
+     * 避免用户查看其他人的私人旅行数据。
+     */
+    public List<TravelPlan> getMyPlans(Long userId) {
+        LambdaQueryWrapper<TravelPlan> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(TravelPlan::getUserId, userId)
+                .orderByDesc(TravelPlan::getCreateTime);
+        return travelPlanMapper.selectList(wrapper);
     }
 }

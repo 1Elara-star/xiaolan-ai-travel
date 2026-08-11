@@ -57,4 +57,15 @@ public class TravelPlanController {
             @PathVariable Long id) {
         return travelPlanService.getMyPlanById(userId, id);
     }
+
+    /**
+     * 修改当前登录用户自己的旅行需求。
+     */
+    @PutMapping("/{id}")
+    public TravelPlan updateMyPlan(
+            @RequestAttribute("currentUserId") Long userId,
+            @PathVariable Long id,
+            @Valid @RequestBody TravelPlanRequest request) {
+        return travelPlanService.updateMyPlan(userId, id, request);
+    }
 }

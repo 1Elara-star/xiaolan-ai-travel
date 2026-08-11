@@ -110,4 +110,49 @@ public class TravelPlanService {
         }
         return plan;
     }
+
+    /**
+     * 修改当前登录用户自己的旅行需求。
+     *
+     * 关键需求发生变化后，旧的 AI 方案不再可靠，
+     * 因此清空方案内容并重新进入规划状态。
+     */
+    public TravelPlan updateMyPlan(
+            Long userId,
+            Long planId,
+            TravelPlanRequest request) {
+
+        TravelPlan plan = getMyPlanById(userId, planId);
+        if (request.getEndDate().isBefore(request.getStartDate())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "结束日期不能早于出发日期"
+            );
+        }
+
+        int travelDays = (int) ChronoUnit.DAYS.between(
+                request.getStartDate(),
+                request.getEndDate()
+        ) + 1;
+
+        plan.setTitle(request.getTitle());
+        plan.setDepartureCity(request.getDepartureCity());
+        plan.setDestination(request.getDestination());
+        plan.setStartDate(request.getStartDate());
+        plan.setEndDate(request.getEndDate());
+        plan.setTravelDays(travelDays);
+        plan.setPeopleCount(request.getPeopleCount());
+        plan.setCompanionType(request.getCompanionType());
+        plan.setBudget(request.getBudget());
+        plan.setTripType(request.getTripType());
+        plan.setTripPreferences(request.getTripPreferences());
+        plan.setSpecialRequirements(request.getSpecialRequirements());
+        plan.setPlanContent(null);
+        plan.setTripStatus("PLANNING");
+
+        if (travelPlanMapper.updateById(plan) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "旅行计划不存在");
+        }
+        return getMyPlanById(userId, planId);
+    }
 }

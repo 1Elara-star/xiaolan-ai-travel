@@ -68,4 +68,15 @@ public class TravelPlanController {
             @Valid @RequestBody TravelPlanRequest request) {
         return travelPlanService.updateMyPlan(userId, id, request);
     }
+
+    /**
+     * 删除当前登录用户自己的旅行计划。
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteMyPlan(
+            @RequestAttribute("currentUserId") Long userId,
+            @PathVariable Long id) {
+        travelPlanService.deleteMyPlan(userId, id);
+        return ResponseEntity.noContent().build();
+    }
 }

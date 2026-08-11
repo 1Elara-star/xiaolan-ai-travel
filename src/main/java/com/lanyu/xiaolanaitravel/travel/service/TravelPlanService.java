@@ -155,4 +155,17 @@ public class TravelPlanService {
         }
         return getMyPlanById(userId, planId);
     }
+
+    /**
+     * 删除当前登录用户自己的旅行计划。
+     *
+     * 当前阶段采用物理删除；开始使用行程节点、反馈等关联数据前，
+     * 需要升级为事务内关联删除或重新设计逻辑删除。
+     */
+    public void deleteMyPlan(Long userId, Long planId) {
+        TravelPlan plan = getMyPlanById(userId, planId);
+        if (travelPlanMapper.deleteById(plan.getId()) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "旅行计划不存在");
+        }
+    }
 }

@@ -1,0 +1,14 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { verifyAdmin } from '@/api/admin'
+import { useAuthStore } from '@/stores/auth'
+import { getResponseMessage } from '@/utils/apiError'
+
+const authStore=useAuthStore(), router=useRouter()
+const status=ref('正在验证管理员权限…'), error=ref('')
+onMounted(async()=>{try{status.value=await verifyAdmin()}catch(e){error.value=getResponseMessage(e)||'管理员权限验证失败。'}})
+async function signOut(){authStore.signOut();await router.push('/')}
+</script>
+<template><div class="admin-shell"><aside><div><strong>小兰管理台</strong><span>ADMIN CONSOLE</span></div><nav><a class="active" href="#overview">概览</a><a href="#modules">功能模块</a><a href="/">返回用户端</a></nav><button @click="signOut">退出登录</button></aside><main><header><div><p>管理员工作台</p><h1>系统概览</h1></div><span>{{authStore.displayName}}</span></header><p v-if="error" class="error">{{error}}</p><section id="overview" class="notice"><strong>{{status}}</strong><p>管理员与普通用户已使用角色权限隔离。当前后台只开放权限验证，数据管理接口尚未开发，因此不会展示虚假的管理按钮。</p></section><section id="modules" class="modules"><article><small>用户与画像</small><h2>待开发管理接口</h2><p>后续可增加用户查询、禁用与画像审查。</p></article><article><small>城市与景点</small><h2>待开发管理接口</h2><p>后续可维护城市、景点及基础数据。</p></article><article><small>行程数据</small><h2>仅用户本人可见</h2><p>当前保持严格的数据归属隔离。</p></article></section></main></div></template>
+<style scoped>.admin-shell{display:grid;min-height:100vh;background:#f5f4f1;grid-template-columns:220px 1fr}aside{display:flex;padding:30px 22px;background:#292826;color:#fff;flex-direction:column}aside div{display:grid;gap:3px}aside strong{font-size:22px}aside span{font-size:9px;letter-spacing:.18em;color:#aaa69f}nav{display:grid;margin-top:45px;gap:8px}nav a{padding:11px 13px;border-radius:8px;color:#d9d5cf;text-decoration:none;font-size:13px}nav a.active,nav a:hover{background:#45423e}aside button{margin-top:auto;padding:10px;border:1px solid #605c56;border-radius:8px;background:transparent;color:#ddd;cursor:pointer}main{padding:48px clamp(30px,6vw,80px)}header{display:flex;align-items:center;justify-content:space-between}header p{margin:0;color:#a56b62;font-size:12px}h1{margin:6px 0;font-size:38px}.notice{margin-top:30px;padding:24px;border-left:4px solid #b1766c;background:white}.notice p{margin-bottom:0;color:#77716b;line-height:1.7}.modules{display:grid;margin-top:18px;grid-template-columns:repeat(3,1fr);gap:14px}.modules article{padding:22px;background:white;border:1px solid #e3dfd9;border-radius:12px}.modules small{color:#9d6b63}.modules h2{font-size:17px}.modules p{color:#77716b;font-size:13px;line-height:1.6}.error{color:#b54f52}@media(max-width:800px){.admin-shell{grid-template-columns:1fr}aside{min-height:auto}nav{display:flex;margin-top:20px}aside button{margin-top:15px}main{padding:30px 20px}.modules{grid-template-columns:1fr}}</style>

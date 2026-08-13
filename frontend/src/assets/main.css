@@ -1,0 +1,59 @@
+:root {
+  --text-main: #352b29;
+  --text-muted: #8b7e78;
+  --coral: #f0787a;
+  --coral-strong: #f47f82;
+  --coral-light: #fbdeda;
+  --border-soft: rgba(115, 88, 77, 0.1);
+  --radius-small: 12px;
+  --radius-medium: 16px;
+  --radius-large: 19px;
+  --shadow-soft: 0 9px 24px rgba(79, 58, 48, 0.07);
+  --shadow-card: 0 12px 25px rgba(60, 43, 36, 0.1);
+  --font-display: 'STKaiti', 'KaiTi', serif;
+  color: #352b29;
+  background: #f5eee9;
+  font-family:
+    'PingFang SC',
+    'Microsoft YaHei',
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  color: inherit;
+}
+
+#app {
+  min-height: 100vh;
+}

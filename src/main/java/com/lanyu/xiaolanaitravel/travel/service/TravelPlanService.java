@@ -2,10 +2,14 @@ package com.lanyu.xiaolanaitravel.travel.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanRequest;
+import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanResponse;
 import com.lanyu.xiaolanaitravel.travel.entity.TravelPlan;
 import com.lanyu.xiaolanaitravel.travel.mapper.TravelPlanMapper;
+import com.lanyu.xiaolanaitravel.travel.entity.TravelPlanItem;
+import com.lanyu.xiaolanaitravel.travel.mapper.TravelPlanItemMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.temporal.ChronoUnit;
@@ -18,9 +22,13 @@ import java.util.List;
 public class TravelPlanService {
 
     private final TravelPlanMapper travelPlanMapper;
+    private final TravelPlanItemMapper travelPlanItemMapper;
 
-    public TravelPlanService(TravelPlanMapper travelPlanMapper) {
+    public TravelPlanService(
+            TravelPlanMapper travelPlanMapper,
+            TravelPlanItemMapper travelPlanItemMapper) {
         this.travelPlanMapper = travelPlanMapper;
+        this.travelPlanItemMapper = travelPlanItemMapper;
     }
 
     /**
@@ -54,9 +62,9 @@ public class TravelPlanService {
         // 当前登录用户，由JWT确定
         plan.setUserId(userId);
 
-        plan.setTitle(request.getTitle());
-        plan.setDepartureCity(request.getDepartureCity());
-        plan.setDestination(request.getDestination());
+        plan.setTitle(request.getTitle().strip());
+        plan.setDepartureCity(request.getDepartureCity().strip());
+        plan.setDestination(request.getDestination().strip());
         plan.setStartDate(request.getStartDate());
         plan.setEndDate(request.getEndDate());
 
@@ -64,11 +72,11 @@ public class TravelPlanService {
         plan.setTravelDays(travelDays);
 
         plan.setPeopleCount(request.getPeopleCount());
-        plan.setCompanionType(request.getCompanionType());
+        plan.setCompanionType(normalize(request.getCompanionType()));
         plan.setBudget(request.getBudget());
-        plan.setTripType(request.getTripType());
-        plan.setTripPreferences(request.getTripPreferences());
-        plan.setSpecialRequirements(request.getSpecialRequirements());
+        plan.setTripType(normalize(request.getTripType()));
+        plan.setTripPreferences(normalize(request.getTripPreferences()));
+        plan.setSpecialRequirements(normalize(request.getSpecialRequirements()));
 
         // 刚创建时还没有AI行程
         plan.setPlanContent(null);
@@ -77,10 +85,12 @@ public class TravelPlanService {
         plan.setTripStatus("PLANNING");
 
         // 4. 写入数据库
-        travelPlanMapper.insert(plan);
+        if (travelPlanMapper.insert(plan) == 0) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "创建旅行计划失败");
+        }
 
         // 5. 返回创建后的旅行计划
-        return plan;
+        return getMyPlanById(userId, plan.getId());
     }
 
     /**
@@ -117,6 +127,7 @@ public class TravelPlanService {
      * 关键需求发生变化后，旧的 AI 方案不再可靠，
      * 因此清空方案内容并重新进入规划状态。
      */
+    @Transactional
     public TravelPlan updateMyPlan(
             Long userId,
             Long planId,
@@ -135,21 +146,30 @@ public class TravelPlanService {
                 request.getEndDate()
         ) + 1;
 
-        plan.setTitle(request.getTitle());
-        plan.setDepartureCity(request.getDepartureCity());
-        plan.setDestination(request.getDestination());
+        Long outOfRangeNodes = travelPlanItemMapper.selectCount(
+                new LambdaQueryWrapper<TravelPlanItem>()
+                        .eq(TravelPlanItem::getPlanId, planId)
+                        .gt(TravelPlanItem::getDayNumber, travelDays));
+        if (outOfRangeNodes > 0) {
+            travelPlanItemMapper.delete(new LambdaQueryWrapper<TravelPlanItem>()
+                    .eq(TravelPlanItem::getPlanId, planId)
+                    .gt(TravelPlanItem::getDayNumber, travelDays));
+        }
+
+        plan.setTitle(request.getTitle().strip());
+        plan.setDepartureCity(request.getDepartureCity().strip());
+        plan.setDestination(request.getDestination().strip());
         plan.setStartDate(request.getStartDate());
         plan.setEndDate(request.getEndDate());
         plan.setTravelDays(travelDays);
         plan.setPeopleCount(request.getPeopleCount());
-        plan.setCompanionType(request.getCompanionType());
+        plan.setCompanionType(normalize(request.getCompanionType()));
         plan.setBudget(request.getBudget());
-        plan.setTripType(request.getTripType());
-        plan.setTripPreferences(request.getTripPreferences());
-        plan.setSpecialRequirements(request.getSpecialRequirements());
+        plan.setTripType(normalize(request.getTripType()));
+        plan.setTripPreferences(normalize(request.getTripPreferences()));
+        plan.setSpecialRequirements(normalize(request.getSpecialRequirements()));
         plan.setPlanContent(null);
         plan.setTripStatus("PLANNING");
-
         if (travelPlanMapper.updateById(plan) == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "旅行计划不存在");
         }
@@ -162,10 +182,25 @@ public class TravelPlanService {
      * 当前阶段采用物理删除；开始使用行程节点、反馈等关联数据前，
      * 需要升级为事务内关联删除或重新设计逻辑删除。
      */
+    @Transactional
     public void deleteMyPlan(Long userId, Long planId) {
         TravelPlan plan = getMyPlanById(userId, planId);
+        travelPlanItemMapper.delete(new LambdaQueryWrapper<TravelPlanItem>()
+                .eq(TravelPlanItem::getPlanId, plan.getId()));
         if (travelPlanMapper.deleteById(plan.getId()) == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "旅行计划不存在");
         }
+    }
+
+    public TravelPlanResponse toResponse(TravelPlan plan) {
+        return new TravelPlanResponse(plan.getId(), plan.getTitle(), plan.getDepartureCity(),
+                plan.getDestination(), plan.getStartDate(), plan.getEndDate(), plan.getTravelDays(),
+                plan.getPeopleCount(), plan.getCompanionType(), plan.getBudget(), plan.getTripType(),
+                plan.getTripPreferences(), plan.getSpecialRequirements(), plan.getTripStatus(),
+                plan.getCreateTime(), plan.getUpdateTime());
+    }
+
+    private String normalize(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
     }
 }

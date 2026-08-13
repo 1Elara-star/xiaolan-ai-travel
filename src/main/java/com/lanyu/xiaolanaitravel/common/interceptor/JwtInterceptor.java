@@ -1,6 +1,10 @@
 package com.lanyu.xiaolanaitravel.common.interceptor;
 
 import com.lanyu.xiaolanaitravel.common.util.JwtUtil;
+import com.lanyu.xiaolanaitravel.common.exception.ApiErrorWriter;
+import com.lanyu.xiaolanaitravel.user.entity.User;
+import com.lanyu.xiaolanaitravel.user.mapper.UserMapper;
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
@@ -10,9 +14,13 @@ import org.springframework.web.servlet.HandlerInterceptor;
 @Component
 public class JwtInterceptor implements HandlerInterceptor {
     private final JwtUtil jwtUtil;
+    private final UserMapper userMapper;
+    private final ApiErrorWriter errorWriter;
 
-    public JwtInterceptor(JwtUtil jwtUtil) {
+    public JwtInterceptor(JwtUtil jwtUtil, UserMapper userMapper, ApiErrorWriter errorWriter) {
         this.jwtUtil = jwtUtil;
+        this.userMapper = userMapper;
+        this.errorWriter = errorWriter;
     }
 
     @Override
@@ -23,24 +31,37 @@ public class JwtInterceptor implements HandlerInterceptor {
         }
         String authorization = request.getHeader("Authorization");
         if (authorization == null || !authorization.startsWith("Bearer ")) {
-            writeError(response, HttpServletResponse.SC_UNAUTHORIZED, "请先登录");
+            errorWriter.write(request, response, HttpServletResponse.SC_UNAUTHORIZED, "请先登录");
             return false;
         }
-        String token = authorization.substring(7);
-        if (!jwtUtil.validateToken(token)) {
-            writeError(response, HttpServletResponse.SC_UNAUTHORIZED, "登录状态已失效，请重新登录");
+        String token = authorization.substring(7).trim();
+        Long userId;
+        String username;
+        try {
+            Claims claims = jwtUtil.parseToken(token);
+            Number claimUserId = claims.get("userId", Number.class);
+            if (claimUserId == null || claims.getSubject() == null) {
+                throw new IllegalArgumentException("missing identity claims");
+            }
+            userId = claimUserId.longValue();
+            username = claims.getSubject();
+        } catch (RuntimeException exception) {
+            errorWriter.write(request, response, HttpServletResponse.SC_UNAUTHORIZED,
+                    "登录状态已失效，请重新登录");
             return false;
         }
-        request.setAttribute("currentUserId", jwtUtil.getUserId(token));
-        request.setAttribute("currentUsername", jwtUtil.getUsername(token));
-        request.setAttribute("currentRole", jwtUtil.getRole(token));
-        return true;
-    }
 
-    private void writeError(HttpServletResponse response, int status, String message)
-            throws Exception {
-        response.setStatus(status);
-        response.setContentType("application/json;charset=UTF-8");
-        response.getWriter().write("{\"message\":\"" + message + "\"}");
+        // Resolve the current role and account state from the database. A deleted user or
+        // revoked administrator token must not remain valid until the JWT expires.
+        User user = userMapper.selectById(userId);
+        if (user == null || !username.equals(user.getUsername())) {
+            errorWriter.write(request, response, HttpServletResponse.SC_UNAUTHORIZED,
+                    "账号已失效，请重新登录");
+            return false;
+        }
+        request.setAttribute("currentUserId", user.getId());
+        request.setAttribute("currentUsername", user.getUsername());
+        request.setAttribute("currentRole", user.getRole());
+        return true;
     }
 }

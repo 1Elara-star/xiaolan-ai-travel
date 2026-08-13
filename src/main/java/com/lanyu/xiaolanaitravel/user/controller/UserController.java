@@ -4,6 +4,7 @@ import com.lanyu.xiaolanaitravel.user.dto.LoginRequest;
 import com.lanyu.xiaolanaitravel.user.dto.LoginResponse;
 import com.lanyu.xiaolanaitravel.user.dto.RegisterRequest;
 import com.lanyu.xiaolanaitravel.user.dto.UserInfoResponse;
+import com.lanyu.xiaolanaitravel.user.dto.UserUpdateRequest;
 import com.lanyu.xiaolanaitravel.user.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -36,5 +37,12 @@ public class UserController {
     @GetMapping("/me")
     public UserInfoResponse getCurrentUser(@RequestAttribute("currentUserId") Long userId) {
         return userService.getUserInfo(userId);
+    }
+
+    @PutMapping("/me")
+    public UserInfoResponse updateCurrentUser(
+            @RequestAttribute("currentUserId") Long userId,
+            @Valid @RequestBody UserUpdateRequest request) {
+        return userService.updateUserInfo(userId, request);
     }
 }

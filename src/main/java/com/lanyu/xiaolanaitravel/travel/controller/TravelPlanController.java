@@ -1,7 +1,7 @@
 package com.lanyu.xiaolanaitravel.travel.controller;
 
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanRequest;
-import com.lanyu.xiaolanaitravel.travel.entity.TravelPlan;
+import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanResponse;
 import com.lanyu.xiaolanaitravel.travel.service.TravelPlanService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -27,46 +27,44 @@ public class TravelPlanController {
      * 创建旅行计划
      */
     @PostMapping
-    public ResponseEntity<TravelPlan> createPlan(
+    public ResponseEntity<TravelPlanResponse> createPlan(
             @RequestAttribute("currentUserId") Long userId,
             @Valid @RequestBody TravelPlanRequest request) {
 
-        TravelPlan plan =
-                travelPlanService.createPlan(userId, request);
-
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .body(plan);
+                .body(travelPlanService.toResponse(travelPlanService.createPlan(userId, request)));
     }
 
     /**
      * 查询当前登录用户自己的旅行计划。
      */
     @GetMapping("/my")
-    public List<TravelPlan> getMyPlans(
+    public List<TravelPlanResponse> getMyPlans(
             @RequestAttribute("currentUserId") Long userId) {
-        return travelPlanService.getMyPlans(userId);
+        return travelPlanService.getMyPlans(userId).stream()
+                .map(travelPlanService::toResponse).toList();
     }
 
     /**
      * 查看当前登录用户自己的单个旅行计划。
      */
     @GetMapping("/{id}")
-    public TravelPlan getMyPlanById(
+    public TravelPlanResponse getMyPlanById(
             @RequestAttribute("currentUserId") Long userId,
             @PathVariable Long id) {
-        return travelPlanService.getMyPlanById(userId, id);
+        return travelPlanService.toResponse(travelPlanService.getMyPlanById(userId, id));
     }
 
     /**
      * 修改当前登录用户自己的旅行需求。
      */
     @PutMapping("/{id}")
-    public TravelPlan updateMyPlan(
+    public TravelPlanResponse updateMyPlan(
             @RequestAttribute("currentUserId") Long userId,
             @PathVariable Long id,
             @Valid @RequestBody TravelPlanRequest request) {
-        return travelPlanService.updateMyPlan(userId, id, request);
+        return travelPlanService.toResponse(travelPlanService.updateMyPlan(userId, id, request));
     }
 
     /**

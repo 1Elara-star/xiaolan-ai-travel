@@ -1,10 +1,17 @@
+function containsControlCharacter(value: string) {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+    return codePoint <= 0x1f || codePoint === 0x7f
+  })
+}
+
 export function getSafeRedirect(value: unknown, fallback = '/') {
   if (
     typeof value !== 'string' ||
     !value.startsWith('/') ||
     value.startsWith('//') ||
     value.includes('\\') ||
-    /[\u0000-\u001f\u007f]/.test(value)
+    containsControlCharacter(value)
   ) {
     return fallback
   }

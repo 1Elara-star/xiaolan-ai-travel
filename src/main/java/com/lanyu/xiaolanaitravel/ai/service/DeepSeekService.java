@@ -4,6 +4,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lanyu.xiaolanaitravel.ai.dto.AiTravelPlanResponse;
 
 import java.util.List;
 import java.util.Map;
@@ -13,19 +16,24 @@ public class DeepSeekService {
 
     private final RestClient restClient;
     private final String model;
+    private final ObjectMapper objectMapper;
 
     public DeepSeekService(
             @Value("${deepseek.api-key}") String apiKey,
             @Value("${deepseek.base-url}") String baseUrl,
-            @Value("${deepseek.model}") String model) {
+            @Value("${deepseek.model}") String model,
+            ObjectMapper objectMapper) {
 
         this.model = model;
+        this.objectMapper = objectMapper;
 
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .build();
     }
+
+
 
     public String chat(String message) {
 
@@ -106,5 +114,18 @@ public class DeepSeekService {
                 (Map<String, Object>) choices.get(0).get("message");
 
         return (String) messageObject.get("content");
+    }
+    public AiTravelPlanResponse generateTravelPlan(String message) {
+
+        String json = chat(message);
+
+        try {
+            return objectMapper.readValue(
+                    json,
+                    AiTravelPlanResponse.class
+            );
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("DeepSeek返回的行程JSON解析失败", e);
+        }
     }
 }

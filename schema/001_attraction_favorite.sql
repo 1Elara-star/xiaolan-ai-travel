@@ -1,5 +1,5 @@
--- Review and execute manually against the ai_travel database.
--- The application intentionally does not auto-run schema migrations.
+-- 为已有 ai_travel 数据库增加景点收藏表。
+-- 使用 IF NOT EXISTS，可安全重复执行，不会删除已有收藏数据。
 CREATE TABLE IF NOT EXISTS attraction_favorite (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '收藏ID',
     user_id BIGINT NOT NULL COMMENT '用户ID',

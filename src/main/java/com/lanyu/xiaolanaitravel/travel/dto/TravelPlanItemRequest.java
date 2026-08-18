@@ -2,6 +2,7 @@ package com.lanyu.xiaolanaitravel.travel.dto;
 
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -44,6 +45,10 @@ public record TravelPlanItemRequest(
 
         LocalTime startTime,
         LocalTime endTime,
+
+        @Min(value = 0, message = "结束日期偏移不能小于0")
+        @Max(value = 1, message = "结束日期偏移目前只能是0或1")
+        Integer endDayOffset,
 
         @Size(max = 30, message = "交通方式不能超过30字")
         String transportMode,

@@ -53,19 +53,25 @@ public class TravelPlanItem {
     /** 纬度 */
     private BigDecimal latitude;
 
+    /** 高德城市编码，用于公交路径规划 */
+    private String cityCode;
+
     /** 节点开始时间 */
     private LocalTime startTime;
 
     /** 节点结束时间 */
     private LocalTime endTime;
 
+    /** 结束时间相对开始日的偏移量：0=当天，1=次日 */
+    private Integer endDayOffset;
+
     /** 从上一个节点到此处的交通方式 */
     private String transportMode;
 
-    /** 与上一个节点的距离，单位由后续地图 API 方案统一确定 */
+    /** 与上一个节点的路线距离，单位：米 */
     private Integer distanceFromPrev;
 
-    /** 从上一个节点出发所需时间，单位由后续地图 API 方案统一确定 */
+    /** 从上一个节点出发所需时间，单位：分钟 */
     private Integer travelTimeFromPrev;
 
     /** 节点说明 */

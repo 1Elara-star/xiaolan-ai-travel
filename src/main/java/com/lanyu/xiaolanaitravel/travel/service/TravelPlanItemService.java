@@ -92,8 +92,8 @@ public class TravelPlanItemService {
     public TravelPlanItemResponse toResponse(TravelPlanItem item) {
         return new TravelPlanItemResponse(item.getId(), item.getPlanId(), item.getDayNumber(),
                 item.getItemOrder(), item.getItemType(), item.getAttractionId(), item.getPlaceName(),
-                item.getAddress(), item.getLongitude(), item.getLatitude(), item.getStartTime(),
-                item.getEndTime(), item.getTransportMode(), item.getDistanceFromPrev(),
+                item.getAddress(), item.getLongitude(), item.getLatitude(), item.getCityCode(), item.getStartTime(),
+                item.getEndTime(), item.getEndDayOffset(), item.getTransportMode(), item.getDistanceFromPrev(),
                 item.getTravelTimeFromPrev(), item.getDescription(), item.getCreateTime(),
                 item.getUpdateTime());
     }
@@ -103,10 +103,7 @@ public class TravelPlanItemService {
         if (request.dayNumber() > plan.getTravelDays()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "节点天数超出行程总天数");
         }
-        if (request.startTime() != null && request.endTime() != null
-                && !request.endTime().isAfter(request.startTime())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "结束时间必须晚于开始时间");
-        }
+        validateTimeRange(request.startTime(), request.endTime(), resolveEndDayOffset(request));
         if (request.attractionId() != null
                 && attractionMapper.selectById(request.attractionId()) == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "关联景点不存在");
@@ -135,6 +132,7 @@ public class TravelPlanItemService {
         item.setLatitude(request.latitude());
         item.setStartTime(request.startTime());
         item.setEndTime(request.endTime());
+        item.setEndDayOffset(resolveEndDayOffset(request));
         item.setTransportMode(normalize(request.transportMode()));
         item.setDistanceFromPrev(request.distanceFromPrev());
         item.setTravelTimeFromPrev(request.travelTimeFromPrev());
@@ -154,5 +152,26 @@ public class TravelPlanItemService {
 
     private String normalize(String value) {
         return value == null || value.isBlank() ? null : value.strip();
+    }
+
+    private int resolveEndDayOffset(TravelPlanItemRequest request) {
+        return request.endDayOffset() == null ? 0 : request.endDayOffset();
+    }
+
+    private void validateTimeRange(
+            java.time.LocalTime startTime,
+            java.time.LocalTime endTime,
+            int endDayOffset) {
+        if (endDayOffset == 1 && (startTime == null || endTime == null)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "跨天节点必须同时填写开始时间和结束时间");
+        }
+        if (startTime != null && endTime != null
+                && endDayOffset == 0 && !endTime.isAfter(startTime)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "当天结束的节点，结束时间必须晚于开始时间；跨天请将endDayOffset设为1");
+        }
     }
 }

@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS travel_plan (
 CREATE TABLE IF NOT EXISTS travel_plan_item (
   id BIGINT NOT NULL AUTO_INCREMENT, plan_id BIGINT NOT NULL, day_number INT NOT NULL, item_order INT NOT NULL, item_type VARCHAR(30) NOT NULL,
   attraction_id BIGINT, place_name VARCHAR(150) NOT NULL, address VARCHAR(255), longitude DECIMAL(10,7), latitude DECIMAL(10,7), start_time TIME, end_time TIME,
-  transport_mode VARCHAR(30), distance_from_prev INT, travel_time_from_prev INT, description VARCHAR(500),
+  end_day_offset TINYINT NOT NULL DEFAULT 0,
+  city_code VARCHAR(20), transport_mode VARCHAR(30), distance_from_prev INT, travel_time_from_prev INT, description VARCHAR(500),
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY(id), UNIQUE KEY uk_plan_day_order(plan_id,day_number,item_order), KEY idx_item_plan(plan_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

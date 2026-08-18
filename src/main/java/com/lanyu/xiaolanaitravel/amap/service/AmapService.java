@@ -5,6 +5,7 @@ import com.lanyu.xiaolanaitravel.amap.dto.AmapPoiSearchResponse;
 import com.lanyu.xiaolanaitravel.amap.dto.AmapRouteApiResponse;
 import com.lanyu.xiaolanaitravel.amap.dto.AmapRouteResult;
 import com.lanyu.xiaolanaitravel.amap.dto.AmapTravelMode;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,7 @@ public class AmapService {
     private final RestClient restClient;
     private final String apiKey;
 
+    @Autowired
     public AmapService(
             @Value("${amap.api-key}") String apiKey,
             @Value("${amap.base-url}") String baseUrl) {

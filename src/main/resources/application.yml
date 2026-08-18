@@ -21,8 +21,6 @@ app:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    # 开发阶段输出 SQL，便于定位数据库问题。
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     banner: false
 

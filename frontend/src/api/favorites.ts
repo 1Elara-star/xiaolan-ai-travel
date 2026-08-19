@@ -11,7 +11,9 @@ export async function listFavoriteAttractions(): Promise<FavoriteAttractionRespo
   return response.data
 }
 
-export async function addFavoriteAttraction(attractionId: string): Promise<FavoriteStatusResponse> {
+export async function addFavoriteAttraction(
+  attractionId: string | number,
+): Promise<FavoriteStatusResponse> {
   const response = await http.post<FavoriteStatusResponse>(
     `/favorites/attractions/${encodeURIComponent(attractionId)}`,
   )
@@ -19,7 +21,7 @@ export async function addFavoriteAttraction(attractionId: string): Promise<Favor
 }
 
 export async function removeFavoriteAttraction(
-  attractionId: string,
+  attractionId: string | number,
 ): Promise<FavoriteStatusResponse> {
   const response = await http.delete<FavoriteStatusResponse>(
     `/favorites/attractions/${encodeURIComponent(attractionId)}`,

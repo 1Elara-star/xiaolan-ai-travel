@@ -21,6 +21,8 @@ const activeTag = ref('海边')
 const favorites = ref<Record<string, boolean>>(readJsonStorage(HOME_FAVORITES_KEY, {}))
 const accountMenuOpen = ref(false)
 const saveMessage = ref('')
+const searchText = ref('')
+const searchMessage = ref('')
 
 const ideaSummary = computed(() => travelIdea.value.trim() || '还没有写下旅行想法')
 
@@ -45,6 +47,24 @@ function selectCity(slug: CitySlug) {
   void router.push({ name: 'city-explore', params: { city: slug } })
 }
 
+function searchCity() {
+  const keyword = searchText.value.trim().toLowerCase()
+  const matches: Array<[CitySlug, string[]]> = [
+    ['xiamen', ['厦门', 'xiamen']],
+    ['chengdu', ['成都', 'chengdu']],
+    ['suzhou', ['苏州', 'suzhou']],
+  ]
+  const matched = matches.find(([, keywords]) => keywords.some((item) => keyword.includes(item)))
+
+  if (matched) {
+    searchMessage.value = ''
+    selectCity(matched[0])
+    return
+  }
+
+  searchMessage.value = keyword ? '目前可以探索厦门、成都和苏州。' : '请输入想看的城市。'
+}
+
 function openAccount() {
   if (authStore.isAuthenticated) {
     accountMenuOpen.value = !accountMenuOpen.value
@@ -66,11 +86,12 @@ function signOut() {
 
     <main class="main-content">
       <header class="topbar">
-        <label class="top-search">
+        <form class="top-search" role="search" @submit.prevent="searchCity">
           <span aria-hidden="true">⌕</span>
-          <input type="search" placeholder="搜索目的地 / 攻略 / 美食" />
-        </label>
-        <button class="notification" type="button" aria-label="消息通知">♧<i></i></button>
+          <input v-model="searchText" type="search" placeholder="搜索厦门、成都或苏州" />
+        </form>
+        <span v-if="searchMessage" class="search-message" role="status">{{ searchMessage }}</span>
+        <button class="notification" type="button" disabled title="消息中心暂未开放" aria-label="消息中心暂未开放">♧</button>
         <div class="account-entry">
           <button
             class="avatar"
@@ -104,7 +125,7 @@ function signOut() {
       <DiscoveryStrip />
     </main>
 
-    <PlanningPanel :idea-summary="ideaSummary" />
+    <PlanningPanel :idea-summary="ideaSummary" @start-exploring="selectCity('xiamen')" />
   </div>
 </template>
 
@@ -153,6 +174,16 @@ function signOut() {
   background: transparent;
   color: #554b47;
   font-size: 11px;
+}
+
+.search-message {
+  color: #9a6a64;
+  font-size: 12px;
+}
+
+.notification:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .notification,

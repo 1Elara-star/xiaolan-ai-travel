@@ -70,6 +70,12 @@ const emit = defineEmits<{
     radial-gradient(circle at 20% 20%, rgba(247, 177, 162, 0.13), transparent 36%), #fffaf6;
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 30px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.city-copy {
+  min-width: 0;
 }
 
 .city-copy > p {
@@ -86,6 +92,7 @@ h1 {
   font-family: var(--font-display);
   font-size: clamp(36px, 4vw, 55px);
   line-height: 1.18;
+  overflow-wrap: anywhere;
 }
 
 .city-copy > span {
@@ -209,6 +216,10 @@ h1 {
     min-width: 0;
     padding: 32px 20px 24px;
     grid-template-columns: 1fr;
+  }
+
+  h1 {
+    font-size: clamp(34px, 10vw, 46px);
   }
 
   .city-postcard {

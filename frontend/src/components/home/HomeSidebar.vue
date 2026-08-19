@@ -10,7 +10,7 @@ const route = useRoute()
 
 withDefaults(
   defineProps<{
-    active?: 'home' | 'explore' | 'plans' | 'profile'
+    active?: 'home' | 'explore' | 'plans' | 'favorites' | 'memories' | 'profile'
   }>(),
   { active: 'home' },
 )
@@ -36,6 +36,20 @@ withDefaults(
       </RouterLink>
       <RouterLink class="nav-item" :class="{ active: active === 'plans' }" to="/plans">
         <span aria-hidden="true">▦</span>我的行程
+      </RouterLink>
+      <RouterLink
+        class="nav-item"
+        :class="{ active: active === 'favorites' }"
+        :to="isAuthenticated ? { name: 'favorites' } : { name: 'login', query: { redirect: '/favorites' } }"
+      >
+        <span aria-hidden="true">♡</span>我的收藏
+      </RouterLink>
+      <RouterLink
+        class="nav-item"
+        :class="{ active: active === 'memories' }"
+        :to="isAuthenticated ? { name: 'memories' } : { name: 'login', query: { redirect: '/memories' } }"
+      >
+        <span aria-hidden="true">◫</span>旅行记忆
       </RouterLink>
       <RouterLink
         class="nav-item"

@@ -7,6 +7,9 @@ import RegisterView from '@/views/RegisterView.vue'
 import MyPlansView from '@/views/MyPlansView.vue'
 import ProfileView from '@/views/ProfileView.vue'
 import AdminView from '@/views/AdminView.vue'
+import FavoritesView from '@/views/FavoritesView.vue'
+import MemoriesView from '@/views/MemoriesView.vue'
+import PlanDetailView from '@/views/PlanDetailView.vue'
 import { useAuthStore } from '@/stores/auth'
 import { getSafeRedirect } from '@/utils/navigation'
 
@@ -27,12 +30,29 @@ const router = createRouter({
       path: '/plan/new',
       name: 'plan-preparation',
       component: PlanPreparationView,
-      meta: { requiresAuth: true },
     },
     {
       path: '/plans',
       name: 'plans',
       component: MyPlansView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/plans/:id(\\d+)',
+      name: 'plan-detail',
+      component: PlanDetailView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/favorites',
+      name: 'favorites',
+      component: FavoritesView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/memories',
+      name: 'memories',
+      component: MemoriesView,
       meta: { requiresAuth: true },
     },
     {

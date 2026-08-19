@@ -38,7 +38,7 @@ const emit = defineEmits<{
             :aria-label="`${favorites[card.city] ? '取消收藏' : '收藏'}${card.city}`"
             @click="emit('toggleFavorite', card.city)"
           >
-            {{ favorites[card.city] ? '♥' : '♡' }} {{ card.favorites }}
+            {{ favorites[card.city] ? '♥ 已收藏' : '♡ 收藏' }}
           </button>
           <button type="button" @click="emit('selectCity', card.slug)">去看看 →</button>
         </div>

@@ -163,6 +163,7 @@ const emit = defineEmits<{
     left: 10px;
     grid-template-columns: 1fr auto;
     gap: 8px;
+    max-width: calc(100vw - 20px);
   }
 
   .favorite-list {
@@ -176,6 +177,21 @@ const emit = defineEmits<{
     padding: 11px 13px;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .tray-title {
+    min-width: 0;
+  }
+
+  .tray-title div {
+    overflow: hidden;
+  }
+
+  .tray-title strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .tray-title small {

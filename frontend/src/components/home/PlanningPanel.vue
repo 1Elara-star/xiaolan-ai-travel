@@ -2,6 +2,10 @@
 defineProps<{
   ideaSummary: string
 }>()
+
+const emit = defineEmits<{
+  startExploring: []
+}>()
 </script>
 
 <template>
@@ -11,13 +15,12 @@ defineProps<{
         <span>小兰陪你规划</span>
         <h2>下一段旅程</h2>
       </div>
-      <button type="button" aria-label="更多操作">•••</button>
     </header>
 
     <div class="plan-preview">
       <p>你的旅行想法</p>
       <strong>{{ ideaSummary }}</strong>
-      <span>这段内容目前只保存在页面中</span>
+      <span>这段内容保存在当前设备中</span>
     </div>
 
     <div class="planning-steps">
@@ -48,7 +51,9 @@ defineProps<{
       <img src="/images/xiaolan-traveler.png" alt="小兰旅行助手" />
     </div>
 
-    <button class="start-button" type="button"><span>开始探索城市</span><b>→</b></button>
+    <button class="start-button" type="button" @click="emit('startExploring')">
+      <span>开始探索城市</span><b>→</b>
+    </button>
   </aside>
 </template>
 

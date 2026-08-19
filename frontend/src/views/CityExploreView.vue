@@ -11,6 +11,7 @@ import FavoriteTray from '@/components/city/FavoriteTray.vue'
 import HomeSidebar from '@/components/home/HomeSidebar.vue'
 import { GUEST_ATTRACTION_FAVORITES_KEY, readJsonStorage } from '@/constants/draft'
 import { cities, citySlugs } from '@/data/cities'
+import { syncGuestFavoritesToAccount } from '@/services/favoriteSync'
 import { useAuthStore } from '@/stores/auth'
 import type { Attraction, CityExploreData, CitySlug } from '@/types/city'
 import { getResponseMessage } from '@/utils/apiError'
@@ -47,9 +48,14 @@ const selectedAttraction = computed<Attraction | null>(
 
 const favoriteIds = computed(() =>
   authStore.isAuthenticated
-    ? city.value.attractions
-        .filter((attraction) => serverFavoriteIds.value.has(attraction.id))
-        .map((attraction) => attraction.id)
+    ? Array.from(
+        new Set([
+          ...city.value.attractions
+            .filter((attraction) => serverFavoriteIds.value.has(attraction.id))
+            .map((attraction) => attraction.id),
+          ...(guestFavoritesByCity.value[city.value.slug] ?? []),
+        ]),
+      )
     : (guestFavoritesByCity.value[city.value.slug] ?? []),
 )
 const favoriteAttractions = computed(() =>
@@ -129,6 +135,8 @@ async function loadCity() {
   }
 
   selectedId.value = city.value.attractions[0]?.id ?? ''
+
+  if (authStore.isAuthenticated) await loadFavorites()
 }
 
 function saveGuestFavorites() {
@@ -141,53 +149,31 @@ function saveGuestFavorites() {
 async function loadFavorites() {
   favoriteMessage.value = ''
   try {
+    const syncResult = await syncGuestFavoritesToAccount()
+    guestFavoritesByCity.value = readJsonStorage(GUEST_ATTRACTION_FAVORITES_KEY, {})
     const favorites = await favoritesApi.listFavoriteAttractions()
     serverFavoriteIds.value = new Set(favorites.map((item) => String(item.attraction.id)))
-    await syncGuestFavorites()
+    if (syncResult.syncedCount > 0) {
+      favoriteMessage.value = `登录前选择的 ${syncResult.syncedCount} 个地点已同步到账号。`
+    } else if (syncResult.remainingCount > 0) {
+      favoriteMessage.value = '部分本地收藏暂时无法同步，已经继续保存在这台设备。'
+    }
   } catch (error) {
     favoriteMessage.value = getResponseMessage(error) || '收藏暂时无法同步，请稍后重试。'
   }
 }
 
-async function syncGuestFavorites() {
-  const pendingEntries = Object.entries(guestFavoritesByCity.value)
-  let changed = false
-
-  for (const [slug, ids] of pendingEntries) {
-    const remaining: string[] = []
-    for (const id of ids) {
-      if (!/^\d+$/.test(id)) {
-        remaining.push(id)
-        continue
-      }
-
-      try {
-        await favoritesApi.addFavoriteAttraction(id)
-        serverFavoriteIds.value.add(id)
-        changed = true
-      } catch {
-        remaining.push(id)
-      }
-    }
-    guestFavoritesByCity.value[slug] = remaining
-  }
-
-  if (changed) {
-    serverFavoriteIds.value = new Set(serverFavoriteIds.value)
-    saveGuestFavorites()
-    favoriteMessage.value = '登录前选择的地点已同步到账号。'
-  }
-}
-
 async function toggleFavorite(id: string) {
-  if (!authStore.isAuthenticated) {
+  if (!authStore.isAuthenticated || !/^\d+$/.test(id)) {
     const slug = city.value.slug
     const ids = guestFavoritesByCity.value[slug] ?? []
     guestFavoritesByCity.value[slug] = ids.includes(id)
       ? ids.filter((item) => item !== id)
       : [...ids, id]
     saveGuestFavorites()
-    await router.push({ name: 'login', query: { redirect: route.fullPath } })
+    favoriteMessage.value = authStore.isAuthenticated
+      ? '城市服务暂时不可用，已先保存在这台设备。'
+      : '已先保存在这台设备，登录后会尝试同步到账号。'
     return
   }
 
@@ -271,10 +257,12 @@ if (!citySlugs.includes(citySlug.value)) {
     linear-gradient(90deg, rgba(116, 88, 73, 0.02) 1px, transparent 1px), #faf6f1;
   background-size: 28px 28px;
   grid-template-columns: 178px minmax(0, 1fr);
+  overflow-x: hidden;
 }
 
 main {
   min-width: 0;
+  max-width: 100%;
 }
 
 .explore-content {

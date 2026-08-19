@@ -4,6 +4,7 @@ import com.lanyu.xiaolanaitravel.ai.dto.AiTravelDay;
 import com.lanyu.xiaolanaitravel.ai.dto.AiTravelPlanResponse;
 import com.lanyu.xiaolanaitravel.ai.service.AiTravelPlanService;
 import com.lanyu.xiaolanaitravel.ai.service.DeepSeekService;
+import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraft;
 import com.lanyu.xiaolanaitravel.travel.entity.TravelPlan;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,28 +16,37 @@ import java.util.Set;
 /**
  * AI 旅行行程生成编排服务。
  *
- * 负责把以下几个步骤串起来：
+ * 当前负责：
  *
  * 1. 读取用户已经保存的旅行计划；
  * 2. 根据旅行计划构造 Prompt；
  * 3. 调用 DeepSeek 生成结构化旅行方案；
- * 4. 校验 AI 返回结果；
- * 5. 将 AI 行程保存为正式 TravelPlanItem。
+ * 4. 将 AI 结果转换为候选 TravelPlanDraft；
+ * 5. 当前阶段仍沿用原来的持久化逻辑保存正式行程。
+ *
+ * 后续会继续在 Draft 和最终持久化之间加入：
+ * 高德数据补全、路线计算、固定 Workflow 校验和 Repair。
  */
 @Service
 public class TravelAiGenerationService {
 
     private final TravelPlanService travelPlanService;
+
     private final DeepSeekService deepSeekService;
+
+    private final TravelPlanDraftService travelPlanDraftService;
+
     private final AiTravelPlanService aiTravelPlanService;
 
     public TravelAiGenerationService(
             TravelPlanService travelPlanService,
             DeepSeekService deepSeekService,
+            TravelPlanDraftService travelPlanDraftService,
             AiTravelPlanService aiTravelPlanService) {
 
         this.travelPlanService = travelPlanService;
         this.deepSeekService = deepSeekService;
+        this.travelPlanDraftService = travelPlanDraftService;
         this.aiTravelPlanService = aiTravelPlanService;
     }
 
@@ -55,35 +65,72 @@ public class TravelAiGenerationService {
          * - 判断计划是否属于当前用户
          */
         TravelPlan plan =
-                travelPlanService.getMyPlanById(userId, planId);
+                travelPlanService.getMyPlanById(
+                        userId,
+                        planId
+                );
 
         /*
          * 2. 把数据库里的旅行需求整理成 Prompt。
          */
-        String prompt = buildPrompt(plan);
+        String prompt =
+                buildPrompt(plan);
 
         /*
          * 3. 调用 DeepSeek。
          *
-         * DeepSeekService 会：
+         * DeepSeekService：
          * Prompt
          * → DeepSeek
          * → JSON
          * → AiTravelPlanResponse
          */
         AiTravelPlanResponse aiPlan =
-                deepSeekService.generateTravelPlan(prompt);
+                deepSeekService.generateTravelPlan(
+                        prompt
+                );
 
         /*
-         * 4. 做整体业务校验。
+         * 4. 保留当前已有的整体业务校验。
          *
-         * 防止用户计划是4天，
-         * AI却只生成3天或5天。
+         * 目前先不删除，
+         * 等新的 Draft 流程稳定以后，
+         * 再统一清理重复校验。
          */
-        validateGeneratedPlan(plan, aiPlan);
+        validateGeneratedPlan(
+                plan,
+                aiPlan
+        );
 
         /*
-         * 5. AI DTO → TravelPlanItem → MySQL。
+         * 5. AI DTO → 候选 TravelPlanDraft。
+         *
+         * 从这里开始，
+         * AI 输出已经不再直接等同于正式数据库行程。
+         *
+         * 下一阶段会在这里继续加入：
+         *
+         * Draft
+         * → 高德 POI
+         * → 路线
+         * → Workflow 校验
+         * → Repair
+         * → 最终保存
+         */
+        TravelPlanDraft draft =
+                travelPlanDraftService.createDraft(
+                        plan,
+                        aiPlan
+                );
+
+        /*
+         * 当前阶段暂时还没有让 Draft 进入高德和 Workflow。
+         *
+         * 所以为了不破坏现有业务接口，
+         * 仍然沿用原来的持久化逻辑。
+         *
+         * draft 现在虽然暂时没有继续使用，
+         * 但它已经正式进入主业务链路。
          */
         aiTravelPlanService.saveGeneratedPlan(
                 userId,
@@ -92,7 +139,10 @@ public class TravelAiGenerationService {
         );
 
         /*
-         * 6. 同时把本次 AI 结果返回。
+         * 当前 Controller 仍然返回原始 AI 结构。
+         *
+         * 暂时不修改接口返回类型，
+         * 避免这一小步影响前端或现有调用。
          */
         return aiPlan;
     }
@@ -100,7 +150,8 @@ public class TravelAiGenerationService {
     /**
      * 根据 TravelPlan 自动构造旅行规划 Prompt。
      */
-    private String buildPrompt(TravelPlan plan) {
+    private String buildPrompt(
+            TravelPlan plan) {
 
         return """
                 请根据下面已经确认的旅行需求，
@@ -156,6 +207,9 @@ public class TravelAiGenerationService {
 
     /**
      * 校验 AI 返回的整份行程是否符合原旅行计划。
+     *
+     * 当前暂时保留，
+     * 后续 Draft 流程稳定后再去除重复校验。
      */
     private void validateGeneratedPlan(
             TravelPlan plan,
@@ -168,12 +222,9 @@ public class TravelAiGenerationService {
             );
         }
 
-        /*
-         * 用户数据库里是4天，
-         * AI返回也必须是4天。
-         */
         if (aiPlan.getTravelDays() == null
-                || !aiPlan.getTravelDays().equals(plan.getTravelDays())) {
+                || !aiPlan.getTravelDays()
+                .equals(plan.getTravelDays())) {
 
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
@@ -182,7 +233,8 @@ public class TravelAiGenerationService {
         }
 
         if (aiPlan.getDays() == null
-                || aiPlan.getDays().size() != plan.getTravelDays()) {
+                || aiPlan.getDays().size()
+                != plan.getTravelDays()) {
 
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
@@ -190,29 +242,24 @@ public class TravelAiGenerationService {
             );
         }
 
-        /*
-         * 检查有没有漏掉某一天。
-         *
-         * 例如：
-         * 第1天
-         * 第2天
-         * 第4天
-         *
-         * 虽然总共有3个days，
-         * 但第3天丢了，这也是错误。
-         */
-        Set<Integer> dayNumbers = new HashSet<>();
+        Set<Integer> dayNumbers =
+                new HashSet<>();
 
-        for (AiTravelDay day : aiPlan.getDays()) {
+        for (AiTravelDay day :
+                aiPlan.getDays()) {
 
-            if (day == null || day.getDayNumber() == null) {
+            if (day == null
+                    || day.getDayNumber() == null) {
+
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
                         "AI返回的行程缺少 dayNumber"
                 );
             }
 
-            if (!dayNumbers.add(day.getDayNumber())) {
+            if (!dayNumbers.add(
+                    day.getDayNumber())) {
+
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
                         "AI返回了重复的行程天数"
@@ -224,7 +271,9 @@ public class TravelAiGenerationService {
              dayNumber <= plan.getTravelDays();
              dayNumber++) {
 
-            if (!dayNumbers.contains(dayNumber)) {
+            if (!dayNumbers.contains(
+                    dayNumber)) {
+
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
                         "AI返回的行程缺少第 "
@@ -238,13 +287,15 @@ public class TravelAiGenerationService {
     /**
      * Prompt 中不直接出现 null。
      */
-    private String text(Object value) {
+    private String text(
+            Object value) {
 
         if (value == null) {
             return "未填写";
         }
 
-        String result = value.toString().strip();
+        String result =
+                value.toString().strip();
 
         return result.isBlank()
                 ? "未填写"

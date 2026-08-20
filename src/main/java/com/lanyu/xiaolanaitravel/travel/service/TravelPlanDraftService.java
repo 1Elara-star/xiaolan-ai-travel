@@ -144,6 +144,13 @@ public class TravelPlanDraftService {
                         )
                 );
 
+                draftItem.setAttractionId(
+                        aiItem.getAttractionId()
+                );
+                draftItem.setSourceType(
+                        "AI_RECOMMENDED"
+                );
+
                 /*
                  * DeepSeek 提供的规划内容。
                  */

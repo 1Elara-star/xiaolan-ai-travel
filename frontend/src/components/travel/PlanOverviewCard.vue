@@ -7,6 +7,7 @@ const props = defineProps<{
   plan: TravelPlan
   saving?: boolean
   generating?: boolean
+  initiallyEditing?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -19,7 +20,18 @@ const form = reactive<TravelPlanRequest>({ ...props.plan })
 
 watch(
   () => props.plan,
-  (plan) => Object.assign(form, plan),
+  (plan) => {
+    Object.assign(form, plan)
+    editing.value = false
+  },
+)
+
+watch(
+  () => props.initiallyEditing,
+  (value) => {
+    if (value) editing.value = true
+  },
+  { immediate: true },
 )
 
 function submit() {
@@ -36,7 +48,6 @@ function submit() {
     tripPreferences: form.tripPreferences?.trim() || undefined,
     specialRequirements: form.specialRequirements?.trim() || undefined,
   })
-  editing.value = false
 }
 </script>
 
@@ -59,8 +70,8 @@ function submit() {
     </div>
 
     <aside>
-      <strong>DeepSeek 行程生成</strong>
-      <p>后端已经能够生成结构化行程并保存节点，但目前还不会自动串联高德校验。</p>
+      <strong>小兰候选行程</strong>
+      <p>结合本次需求、用户画像和目的地收藏生成候选。生成后可以逐个挑选，不会自动覆盖详细行程。</p>
       <button type="button" :disabled="generating" @click="emit('generate')">
         {{ generating ? '正在生成…' : '调用 DeepSeek 生成' }}
       </button>

@@ -1,7 +1,9 @@
 import http from '@/api/http'
 import type {
-  AiTravelPlanResult,
   HotelCandidate,
+  HotelSearchFilters,
+  TravelDraftConfirmationResponse,
+  TravelDraftSessionResponse,
   TravelItemLocationResult,
   TravelItemRouteResult,
   TravelMode,
@@ -53,10 +55,7 @@ export async function updatePlanItem(
   itemId: number,
   request: TravelPlanItemRequest,
 ): Promise<TravelPlanItem> {
-  const response = await http.put<TravelPlanItem>(
-    `/travel/plan/${planId}/items/${itemId}`,
-    request,
-  )
+  const response = await http.put<TravelPlanItem>(`/travel/plan/${planId}/items/${itemId}`, request)
   return response.data
 }
 
@@ -64,8 +63,40 @@ export async function deletePlanItem(planId: number, itemId: number): Promise<vo
   await http.delete(`/travel/plan/${planId}/items/${itemId}`)
 }
 
-export async function generatePlanWithAi(planId: number): Promise<AiTravelPlanResult> {
-  const response = await http.post<AiTravelPlanResult>(`/travel/plan/${planId}/ai/generate`)
+export async function generatePlanWithAi(
+  planId: number,
+  additionalRequirements?: string,
+): Promise<TravelDraftSessionResponse> {
+  const response = await http.post<TravelDraftSessionResponse>(
+    `/travel/plan/${planId}/ai/generate`,
+    additionalRequirements?.trim()
+      ? { additionalRequirements: additionalRequirements.trim() }
+      : null,
+    {
+      // DeepSeek 生成时间可能明显长于普通 CRUD。
+      timeout: 180_000,
+    },
+  )
+  return response.data
+}
+
+export async function enrichDraftMap(draftId: string): Promise<TravelDraftSessionResponse> {
+  const response = await http.post<TravelDraftSessionResponse>(
+    `/travel/draft/${encodeURIComponent(draftId)}/map/enrich`,
+    null,
+    { timeout: 120_000 },
+  )
+  return response.data
+}
+
+export async function adoptDraftItems(
+  draftId: string,
+  draftItemKeys: string[],
+): Promise<TravelDraftConfirmationResponse> {
+  const response = await http.post<TravelDraftConfirmationResponse>(
+    `/travel/draft/${encodeURIComponent(draftId)}/confirm`,
+    { draftItemKeys },
+  )
   return response.data
 }
 
@@ -96,7 +127,23 @@ export async function calculateItemRoute(
   return response.data
 }
 
-export async function listHotelCandidates(planId: number): Promise<HotelCandidate[]> {
-  const response = await http.get<HotelCandidate[]>(`/travel/plan/${planId}/hotels`)
+export async function listHotelCandidates(
+  planId: number,
+  filters: HotelSearchFilters = {},
+): Promise<HotelCandidate[]> {
+  const response = await http.get<HotelCandidate[]>(`/travel/plan/${planId}/hotels`, {
+    params: filters,
+  })
+  return response.data
+}
+
+export async function parseHotelPreference(
+  planId: number,
+  preference: string,
+): Promise<HotelSearchFilters> {
+  const response = await http.post<HotelSearchFilters>(
+    `/travel/plan/${planId}/hotels/preferences/parse`,
+    { preference },
+  )
   return response.data
 }

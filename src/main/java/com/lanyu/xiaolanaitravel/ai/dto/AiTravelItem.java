@@ -5,6 +5,9 @@ import lombok.Data;
 @Data
 public class AiTravelItem {
 
+    /** 使用用户收藏景点时返回对应景点 ID；其他节点为空。 */
+    private Long attractionId;
+
     private String placeName;
 
     private String startTime;

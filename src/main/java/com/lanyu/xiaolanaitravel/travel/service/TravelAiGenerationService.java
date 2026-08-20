@@ -1,17 +1,22 @@
 package com.lanyu.xiaolanaitravel.travel.service;
 
-import com.lanyu.xiaolanaitravel.ai.dto.AiTravelDay;
 import com.lanyu.xiaolanaitravel.ai.dto.AiTravelPlanResponse;
-import com.lanyu.xiaolanaitravel.ai.service.AiTravelPlanService;
 import com.lanyu.xiaolanaitravel.ai.service.DeepSeekService;
+import com.lanyu.xiaolanaitravel.explore.dto.AttractionResponse;
+import com.lanyu.xiaolanaitravel.explore.service.ExploreService;
+import com.lanyu.xiaolanaitravel.favorite.dto.FavoriteAttractionResponse;
+import com.lanyu.xiaolanaitravel.favorite.service.AttractionFavoriteService;
+import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftSession;
+import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftSessionResponse;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraft;
 import com.lanyu.xiaolanaitravel.travel.entity.TravelPlan;
-import org.springframework.http.HttpStatus;
+import com.lanyu.xiaolanaitravel.user.entity.UserProfile;
+import com.lanyu.xiaolanaitravel.user.service.UserProfileService;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
-import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * AI 旅行行程生成编排服务。
@@ -19,13 +24,15 @@ import java.util.Set;
  * 当前负责：
  *
  * 1. 读取用户已经保存的旅行计划；
- * 2. 根据旅行计划构造 Prompt；
- * 3. 调用 DeepSeek 生成结构化旅行方案；
- * 4. 将 AI 结果转换为候选 TravelPlanDraft；
- * 5. 当前阶段仍沿用原来的持久化逻辑保存正式行程。
+ * 2. 读取用户画像和当前目的地收藏；
+ * 3. 构造 Prompt；
+ * 4. 调用 DeepSeek 生成结构化旅行方案；
+ * 5. 将 AI 结果转换为候选 TravelPlanDraft；
+ * 6. 使用本地收藏数据补充候选卡片；
+ * 7. 创建内存 Draft Session 并返回给前端。
  *
- * 后续会继续在 Draft 和最终持久化之间加入：
- * 高德数据补全、路线计算、固定 Workflow 校验和 Repair。
+ * 当前流程不会保存正式 TravelPlanItem。
+ * 地图真实数据由独立的 Draft 地图补全流程处理。
  */
 @Service
 public class TravelAiGenerationService {
@@ -36,26 +43,53 @@ public class TravelAiGenerationService {
 
     private final TravelPlanDraftService travelPlanDraftService;
 
-    private final AiTravelPlanService aiTravelPlanService;
+    private final AttractionFavoriteService favoriteService;
+
+    private final UserProfileService userProfileService;
+
+    private final TravelDraftAttractionService draftAttractionService;
+
+    private final ExploreService exploreService;
+
+    private final TravelDraftSessionService travelDraftSessionService;
 
     public TravelAiGenerationService(
             TravelPlanService travelPlanService,
             DeepSeekService deepSeekService,
             TravelPlanDraftService travelPlanDraftService,
-            AiTravelPlanService aiTravelPlanService) {
+            AttractionFavoriteService favoriteService,
+            UserProfileService userProfileService,
+            TravelDraftAttractionService draftAttractionService,
+            ExploreService exploreService,
+            TravelDraftSessionService travelDraftSessionService) {
 
         this.travelPlanService = travelPlanService;
         this.deepSeekService = deepSeekService;
         this.travelPlanDraftService = travelPlanDraftService;
-        this.aiTravelPlanService = aiTravelPlanService;
+        this.favoriteService = favoriteService;
+        this.userProfileService = userProfileService;
+        this.draftAttractionService = draftAttractionService;
+        this.exploreService = exploreService;
+        this.travelDraftSessionService = travelDraftSessionService;
     }
 
     /**
-     * 根据指定旅行计划生成 AI 行程，并保存到数据库。
+     * 根据指定旅行计划生成候选行程会话。
      */
-    public AiTravelPlanResponse generateAndSave(
+    public TravelDraftSessionResponse generateDraftSession(
             Long userId,
             Long planId) {
+
+        return generateDraftSession(userId, planId, null);
+    }
+
+    /**
+     * 根据指定旅行计划和本次补充要求生成候选行程会话。
+     */
+    public TravelDraftSessionResponse generateDraftSession(
+            Long userId,
+            Long planId,
+            String additionalRequirements) {
 
         /*
          * 1. 查询当前用户自己的旅行计划。
@@ -71,13 +105,41 @@ public class TravelAiGenerationService {
                 );
 
         /*
-         * 2. 把数据库里的旅行需求整理成 Prompt。
+         * 2. 读取用户主动填写的画像，
+         * 以及当前目的地相关的收藏景点。
          */
-        String prompt =
-                buildPrompt(plan);
+        UserProfile profile =
+                userProfileService.getProfile(userId);
+
+        List<FavoriteAttractionResponse> favorites =
+                favoriteService.list(userId).stream()
+                        .filter(favorite -> isDestinationFavorite(
+                                favorite,
+                                plan.getDestination()
+                        ))
+                        .toList();
+
+        List<AttractionResponse> localAttractions =
+                exploreService.listAttractions(
+                        plan.getDestination(),
+                        null,
+                        null
+                );
 
         /*
-         * 3. 调用 DeepSeek。
+         * 3. 把旅行需求、画像和收藏整理成 Prompt。
+         */
+        String prompt =
+                buildPrompt(
+                        plan,
+                        profile,
+                        favorites,
+                        localAttractions,
+                        additionalRequirements
+                );
+
+        /*
+         * 4. 调用 DeepSeek。
          *
          * DeepSeekService：
          * Prompt
@@ -91,31 +153,7 @@ public class TravelAiGenerationService {
                 );
 
         /*
-         * 4. 保留当前已有的整体业务校验。
-         *
-         * 目前先不删除，
-         * 等新的 Draft 流程稳定以后，
-         * 再统一清理重复校验。
-         */
-        validateGeneratedPlan(
-                plan,
-                aiPlan
-        );
-
-        /*
          * 5. AI DTO → 候选 TravelPlanDraft。
-         *
-         * 从这里开始，
-         * AI 输出已经不再直接等同于正式数据库行程。
-         *
-         * 下一阶段会在这里继续加入：
-         *
-         * Draft
-         * → 高德 POI
-         * → 路线
-         * → Workflow 校验
-         * → Repair
-         * → 最终保存
          */
         TravelPlanDraft draft =
                 travelPlanDraftService.createDraft(
@@ -124,34 +162,49 @@ public class TravelAiGenerationService {
                 );
 
         /*
-         * 当前阶段暂时还没有让 Draft 进入高德和 Workflow。
-         *
-         * 所以为了不破坏现有业务接口，
-         * 仍然沿用原来的持久化逻辑。
-         *
-         * draft 现在虽然暂时没有继续使用，
-         * 但它已经正式进入主业务链路。
+         * 6. 使用已经存在于本地数据库的收藏景点数据，
+         * 补充图片、故事、地址和已有坐标。
+         * 这里不调用高德。
          */
-        aiTravelPlanService.saveGeneratedPlan(
-                userId,
-                planId,
-                aiPlan
+        Set<Long> favoriteIds = favorites.stream()
+                .map(FavoriteAttractionResponse::attraction)
+                .map(AttractionResponse::id)
+                .collect(Collectors.toSet());
+        draftAttractionService.enrichFromCatalog(
+                draft,
+                localAttractions,
+                favoriteIds
         );
 
         /*
-         * 当前 Controller 仍然返回原始 AI 结构。
+         * 7. 创建临时候选行程会话。
          *
-         * 暂时不修改接口返回类型，
-         * 避免这一小步影响前端或现有调用。
+         * 此时 Draft 只包含 AI 候选内容，
+         * 不依赖任何地图接口。
          */
-        return aiPlan;
+        TravelDraftSession session =
+                travelDraftSessionService.createSession(
+                        userId,
+                        planId,
+                        draft
+                );
+
+        return new TravelDraftSessionResponse(
+                session.getDraftId(),
+                session.getExpiresAt(),
+                session.getDraft()
+        );
     }
 
     /**
      * 根据 TravelPlan 自动构造旅行规划 Prompt。
      */
     private String buildPrompt(
-            TravelPlan plan) {
+            TravelPlan plan,
+            UserProfile profile,
+            List<FavoriteAttractionResponse> favorites,
+            List<AttractionResponse> localAttractions,
+            String additionalRequirements) {
 
         return """
                 请根据下面已经确认的旅行需求，
@@ -172,6 +225,29 @@ public class TravelAiGenerationService {
                 旅行偏好：%s
                 特殊要求：%s
 
+                【用户旅行画像】
+
+                MBTI：%s
+                旅行节奏：%s
+                预算偏好：%s
+                交通偏好：%s
+                兴趣标签：%s
+                不喜欢的内容：%s
+                饮食偏好：%s
+                住宿偏好：%s
+
+                【当前目的地的收藏景点】
+
+                %s
+
+                【本地景点库中可直接展示资料的景点】
+
+                %s
+
+                【用户对本次候选方案的补充要求】
+
+                %s
+
                 【规划要求】
 
                 1. 必须严格按照旅行天数生成完整行程。
@@ -189,6 +265,12 @@ public class TravelAiGenerationService {
                 9. 当前阶段地点地址、经纬度和真实交通时间由后续地图工具补充，
                    不需要自行猜测。
                 10. 行程目的地必须与用户已经确认的旅行计划保持一致。
+                11. 收藏景点是高优先级偏好，但要结合天数和旅行节奏选择，
+                    不要为了塞入全部收藏而让行程过满。
+                12. 使用收藏景点或本地景点库中的景点时，必须返回提供的 attractionId；
+                    使用资料中不存在的其他具体地点时 attractionId 填写 null。
+                13. ATTRACTION 和 EVENT 必须使用具体、可核验的地点名称，
+                    不要使用“海边栈道”“热门街区”“特色景点”等泛化名称。
                 """.formatted(
                 text(plan.getTitle()),
                 text(plan.getDepartureCity()),
@@ -201,87 +283,96 @@ public class TravelAiGenerationService {
                 text(plan.getBudget()),
                 text(plan.getTripType()),
                 text(plan.getTripPreferences()),
-                text(plan.getSpecialRequirements())
+                text(plan.getSpecialRequirements()),
+                text(profile == null ? null : profile.getMbti()),
+                text(profile == null ? null : profile.getTravelPace()),
+                text(profile == null ? null : profile.getBudgetPreference()),
+                text(profile == null ? null : profile.getTransportPreference()),
+                text(profile == null ? null : profile.getInterestTags()),
+                text(profile == null ? null : profile.getDislikeTags()),
+                text(profile == null ? null : profile.getFoodPreference()),
+                text(profile == null ? null : profile.getAccommodationPreference()),
+                formatFavorites(favorites),
+                formatAttractions(localAttractions),
+                text(additionalRequirements)
         );
     }
 
-    /**
-     * 校验 AI 返回的整份行程是否符合原旅行计划。
-     *
-     * 当前暂时保留，
-     * 后续 Draft 流程稳定后再去除重复校验。
-     */
-    private void validateGeneratedPlan(
-            TravelPlan plan,
-            AiTravelPlanResponse aiPlan) {
+    private String formatAttractions(
+            List<AttractionResponse> attractions) {
 
-        if (aiPlan == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    "AI没有返回有效的旅行计划"
-            );
+        if (attractions == null || attractions.isEmpty()) {
+            return "当前目的地暂无本地景点资料";
         }
 
-        if (aiPlan.getTravelDays() == null
-                || !aiPlan.getTravelDays()
-                .equals(plan.getTravelDays())) {
+        return attractions.stream()
+                .map(attraction -> "- attractionId=%s｜名称=%s｜类型=%s｜特色=%s｜建议时长=%s｜标签=%s"
+                        .formatted(
+                                attraction.id(),
+                                text(attraction.name()),
+                                text(attraction.type()),
+                                text(attraction.popularReason()),
+                                text(attraction.suggestedDuration()),
+                                attraction.tags() == null
+                                        || attraction.tags().isEmpty()
+                                        ? "未填写"
+                                        : String.join("、", attraction.tags())
+                        ))
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("当前目的地暂无本地景点资料");
+    }
 
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    "AI返回的旅行天数与原旅行计划不一致"
-            );
+    private String formatFavorites(
+            List<FavoriteAttractionResponse> favorites) {
+
+        if (favorites == null || favorites.isEmpty()) {
+            return "当前目的地暂无收藏景点";
         }
 
-        if (aiPlan.getDays() == null
-                || aiPlan.getDays().size()
-                != plan.getTravelDays()) {
+        return favorites.stream()
+                .map(FavoriteAttractionResponse::attraction)
+                .map(attraction -> "- attractionId=%s｜名称=%s｜类型=%s｜特色=%s｜建议时长=%s｜标签=%s"
+                        .formatted(
+                                attraction.id(),
+                                text(attraction.name()),
+                                text(attraction.type()),
+                                text(attraction.popularReason()),
+                                text(attraction.suggestedDuration()),
+                                attraction.tags() == null
+                                        || attraction.tags().isEmpty()
+                                        ? "未填写"
+                                        : String.join("、", attraction.tags())
+                        ))
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("当前目的地暂无收藏景点");
+    }
 
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    "AI返回的每日行程数量与旅行天数不一致"
-            );
+    private boolean isDestinationFavorite(
+            FavoriteAttractionResponse favorite,
+            String destination) {
+
+        if (favorite == null || favorite.attraction() == null) {
+            return false;
         }
 
-        Set<Integer> dayNumbers =
-                new HashSet<>();
+        AttractionResponse attraction = favorite.attraction();
+        String favoriteCity = normalizeCity(attraction.city());
+        String planDestination = normalizeCity(destination);
 
-        for (AiTravelDay day :
-                aiPlan.getDays()) {
+        return !favoriteCity.isBlank()
+                && !planDestination.isBlank()
+                && (favoriteCity.equals(planDestination)
+                || favoriteCity.contains(planDestination)
+                || planDestination.contains(favoriteCity));
+    }
 
-            if (day == null
-                    || day.getDayNumber() == null) {
-
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_GATEWAY,
-                        "AI返回的行程缺少 dayNumber"
-                );
-            }
-
-            if (!dayNumbers.add(
-                    day.getDayNumber())) {
-
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_GATEWAY,
-                        "AI返回了重复的行程天数"
-                );
-            }
+    private String normalizeCity(String value) {
+        if (value == null) {
+            return "";
         }
 
-        for (int dayNumber = 1;
-             dayNumber <= plan.getTravelDays();
-             dayNumber++) {
-
-            if (!dayNumbers.contains(
-                    dayNumber)) {
-
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_GATEWAY,
-                        "AI返回的行程缺少第 "
-                                + dayNumber
-                                + " 天"
-                );
-            }
-        }
+        return value.strip()
+                .replaceFirst("(特别行政区|自治州|自治区|市)$", "");
     }
 
     /**

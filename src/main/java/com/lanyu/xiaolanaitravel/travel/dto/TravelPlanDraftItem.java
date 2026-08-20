@@ -34,6 +34,12 @@ public class TravelPlanDraftItem {
      */
     private String draftItemKey;
 
+    /** 关联本地景点；收藏景点命中时由后端校验并填写。 */
+    private Long attractionId;
+
+    /** FAVORITE / LOCAL_ATTRACTION / AI_RECOMMENDED。 */
+    private String sourceType;
+
     /**
      * 行程中的第几天。
      */
@@ -88,6 +94,20 @@ public class TravelPlanDraftItem {
      * AI 对该节点的安排说明。
      */
     private String description;
+
+    /*
+     * =========================
+     * 本地景点展示信息
+     * =========================
+     */
+
+    private String imageUrl;
+    private String storyBackground;
+    private String featureDescription;
+    private String suitableTags;
+    private Integer suggestDuration;
+    private String openTime;
+    private String ticketInfo;
 
 
     /*
@@ -159,4 +179,6 @@ public class TravelPlanDraftItem {
      * 与上一个地点之间的交通耗时，单位：分钟。
      */
     private Integer travelTimeFromPrev;
+
+    private Integer straightLineDistanceFromPrev;
 }

@@ -12,6 +12,7 @@ public record TravelItemLocationResponse(
         BigDecimal longitude,
         BigDecimal latitude,
         String cityCode,
+        String imageUrl,
         String source,
         LocalDateTime queriedAt) {
 }

@@ -23,6 +23,20 @@ import java.util.stream.Collectors;
 public class ExploreService {
 
     private static final Map<String, CityPresentation> CITY_PRESENTATIONS = cityPresentations();
+    private static final Map<String, String> LOCAL_ATTRACTION_IMAGES = Map.ofEntries(
+            Map.entry("厦门|鼓浪屿", "/images/cities/xiamen/gulangyu.jpg"),
+            Map.entry("厦门|沙坡尾", "/images/cities/xiamen/shapowei.jpg"),
+            Map.entry("厦门|南普陀寺", "/images/cities/xiamen/nanputuo.jpg"),
+            Map.entry("厦门|集美学村", "/images/cities/xiamen/jimei.jpg"),
+            Map.entry("成都|宽窄巷子", "/images/cities/chengdu/kuanzhai.jpg"),
+            Map.entry("成都|武侯祠", "/images/cities/chengdu/wuhou.jpg"),
+            Map.entry("成都|杜甫草堂", "/images/cities/chengdu/dufu.webp"),
+            Map.entry("成都|鹤鸣茶社", "/images/cities/chengdu/teahouse.webp"),
+            Map.entry("苏州|拙政园", "/images/cities/suzhou/garden.jpg"),
+            Map.entry("苏州|平江路", "/images/cities/suzhou/pingjiang.jpg"),
+            Map.entry("苏州|虎丘", "/images/cities/suzhou/tiger-hill.jpg"),
+            Map.entry("苏州|苏州博物馆", "/images/cities/suzhou/museum.jpg")
+    );
 
     private final AttractionMapper attractionMapper;
 
@@ -109,7 +123,7 @@ public class ExploreService {
         return new AttractionResponse(
                 attraction.getId(), attraction.getName(), attraction.getCity(), subtitle,
                 attraction.getType(),
-                attraction.getImageUrl(), attraction.getStoryBackground(),
+                resolveImage(attraction), attraction.getStoryBackground(),
                 firstNonBlank(attraction.getFeatureDescription(), attraction.getDescription()),
                 splitTags(attraction.getSuitableTags()), formatDuration(attraction.getSuggestDuration()),
                 "", reminder, attraction.getAddress(), attraction.getLongitude(), attraction.getLatitude(),
@@ -169,6 +183,16 @@ public class ExploreService {
     private static String joinNonBlank(String delimiter, String... values) {
         return Arrays.stream(values).filter(Objects::nonNull).filter(value -> !value.isBlank())
                 .collect(Collectors.joining(delimiter));
+    }
+
+    /** 已有旧数据缺少 image_url 时，使用项目内对应景点的真实本地图片。 */
+    private static String resolveImage(Attraction attraction) {
+        String imageUrl = trimToNull(attraction.getImageUrl());
+        if (imageUrl != null) {
+            return imageUrl;
+        }
+        return LOCAL_ATTRACTION_IMAGES.getOrDefault(
+                attraction.getCity() + "|" + attraction.getName(), "");
     }
 
     private static String trimToNull(String value) {

@@ -64,6 +64,12 @@ async function remove(plan: TravelPlan) {
             <RouterLink :to="{ name: 'plan-detail', params: { id: plan.id } }">
               查看详细行程
             </RouterLink>
+            <RouterLink
+              class="edit-link"
+              :to="{ name: 'plan-detail', params: { id: plan.id }, query: { edit: '1' } }"
+            >
+              编辑行程
+            </RouterLink>
             <button type="button" @click="remove(plan)">删除</button>
           </div>
         </article>
@@ -77,6 +83,6 @@ async function remove(plan: TravelPlan) {
 </template>
 
 <style scoped>
-.page-shell{display:grid;min-height:100vh;background:#faf6f1;grid-template-columns:178px minmax(0,1fr)}main{width:min(1040px,calc(100% - 50px));margin:0 auto;padding:48px 0}.heading{display:flex;align-items:end;justify-content:space-between}.heading p{margin:0;color:var(--coral);font-size:12px}.heading h1{margin:8px 0 4px;font-family:var(--font-display);font-size:42px}.heading span{color:var(--text-muted);font-size:13px}.heading>a,.empty>a{padding:11px 18px;border-radius:22px;background:var(--coral-strong);color:white;text-decoration:none;font-size:13px}.grid{display:grid;margin-top:30px;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}article{position:relative;display:grid;padding:24px;border:1px solid #eadfd9;border-radius:18px;background:#fffaf6;box-shadow:var(--shadow-soft);gap:9px}article h2,article p{margin:0}article>span,article small{color:var(--text-muted)}.status{position:absolute;top:20px;right:20px;padding:4px 8px;border-radius:10px;background:var(--coral-light);font-size:11px}.card-actions{display:flex;margin-top:10px;align-items:center;gap:15px}.card-actions a{padding:9px 13px;border-radius:17px;background:#554943;color:white;text-decoration:none;font-size:12px}.card-actions button{border:0;background:transparent;color:#ad6263;cursor:pointer}.empty{margin-top:45px;color:var(--text-muted)}.empty a{display:inline-block;margin-top:8px}.message{color:#b75458}
+.page-shell{display:grid;min-height:100vh;background:#faf6f1;grid-template-columns:178px minmax(0,1fr)}main{width:min(1040px,calc(100% - 50px));margin:0 auto;padding:48px 0}.heading{display:flex;align-items:end;justify-content:space-between}.heading p{margin:0;color:var(--coral);font-size:12px}.heading h1{margin:8px 0 4px;font-family:var(--font-display);font-size:42px}.heading span{color:var(--text-muted);font-size:13px}.heading>a,.empty>a{padding:11px 18px;border-radius:22px;background:var(--coral-strong);color:white;text-decoration:none;font-size:13px}.grid{display:grid;margin-top:30px;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}article{position:relative;display:grid;padding:24px;border:1px solid #eadfd9;border-radius:18px;background:#fffaf6;box-shadow:var(--shadow-soft);gap:9px}article h2,article p{margin:0}article>span,article small{color:var(--text-muted)}.status{position:absolute;top:20px;right:20px;padding:4px 8px;border-radius:10px;background:var(--coral-light);font-size:11px}.card-actions{display:flex;margin-top:10px;align-items:center;flex-wrap:wrap;gap:10px}.card-actions a{padding:9px 13px;border-radius:17px;background:#554943;color:white;text-decoration:none;font-size:12px}.card-actions .edit-link{border:1px solid #dfd0c9;background:#fff;color:#62544e}.card-actions button{padding:8px;border:0;background:transparent;color:#ad6263;cursor:pointer}.empty{margin-top:45px;color:var(--text-muted)}.empty a{display:inline-block;margin-top:8px}.message{color:#b75458}
 @media(max-width:900px){.page-shell{display:block}}@media(max-width:650px){.grid{grid-template-columns:1fr}.heading{align-items:flex-start;gap:18px}.heading h1{font-size:34px}}
 </style>

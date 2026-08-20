@@ -60,6 +60,7 @@ public class AmapService {
                             .queryParam("keywords", normalizedKeyword)
                             .queryParam("region", normalizedRegion)
                             .queryParam("city_limit", true)
+                            .queryParam("show_fields", "photos")
                             .queryParam("page_size", pageSize)
                             .queryParam("page_num", 1)
                             .queryParam("output", "json")

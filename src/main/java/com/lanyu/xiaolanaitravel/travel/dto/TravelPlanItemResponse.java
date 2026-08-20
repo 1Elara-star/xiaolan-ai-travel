@@ -22,7 +22,9 @@ public record TravelPlanItemResponse(
         String transportMode,
         Integer distanceFromPrev,
         Integer travelTimeFromPrev,
+        Integer straightLineDistanceFromPrev,
         String description,
+        String imageUrl,
         LocalDateTime createTime,
         LocalDateTime updateTime) {
 }

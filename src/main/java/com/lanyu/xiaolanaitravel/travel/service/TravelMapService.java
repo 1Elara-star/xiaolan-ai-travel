@@ -60,6 +60,7 @@ public class TravelMapService {
             return new TravelItemLocationResponse(
                     item.getId(), null, item.getPlaceName(), item.getAddress(),
                     item.getLongitude(), item.getLatitude(), item.getCityCode(),
+                    null,
                     "DATABASE_CACHE", null);
         }
 
@@ -82,6 +83,7 @@ public class TravelMapService {
                 item.getLongitude(),
                 item.getLatitude(),
                 item.getCityCode(),
+                firstPhotoUrl(selected),
                 "AMAP_POI_2.0",
                 LocalDateTime.now());
     }
@@ -166,17 +168,13 @@ public class TravelMapService {
         TravelPlanItem previous = travelPlanItemMapper.selectOne(
                 new LambdaQueryWrapper<TravelPlanItem>()
                         .eq(TravelPlanItem::getPlanId, current.getPlanId())
-                        .and(wrapper -> wrapper
-                                .lt(TravelPlanItem::getDayNumber, current.getDayNumber())
-                                .or(nested -> nested
-                                        .eq(TravelPlanItem::getDayNumber, current.getDayNumber())
-                                        .lt(TravelPlanItem::getItemOrder, current.getItemOrder())))
-                        .orderByDesc(TravelPlanItem::getDayNumber)
+                        .eq(TravelPlanItem::getDayNumber, current.getDayNumber())
+                        .lt(TravelPlanItem::getItemOrder, current.getItemOrder())
                         .orderByDesc(TravelPlanItem::getItemOrder)
                         .orderByDesc(TravelPlanItem::getId)
                         .last("LIMIT 1"));
         if (previous == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前节点前面没有可计算路线的行程节点");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "当前节点是当天第一站，没有可计算的上一站路线");
         }
         return previous;
     }
@@ -229,6 +227,19 @@ public class TravelMapService {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "高德地点结果缺少城市编码");
         }
         return poi.getCitycode().strip();
+    }
+
+    private String firstPhotoUrl(AmapPoiItem poi) {
+        if (poi.getPhotos() == null) {
+            return null;
+        }
+        return poi.getPhotos().stream()
+                .filter(java.util.Objects::nonNull)
+                .map(photo -> photo.getUrl())
+                .filter(url -> url != null && !url.isBlank())
+                .map(String::strip)
+                .findFirst()
+                .orElse(null);
     }
 
     private String joinAddress(String... parts) {

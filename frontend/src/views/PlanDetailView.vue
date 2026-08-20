@@ -7,10 +7,15 @@ import HotelCandidateList from '@/components/travel/HotelCandidateList.vue'
 import PlanItemForm from '@/components/travel/PlanItemForm.vue'
 import PlanOverviewCard from '@/components/travel/PlanOverviewCard.vue'
 import PlanTimeline from '@/components/travel/PlanTimeline.vue'
+import TravelDraftPreview from '@/components/travel/TravelDraftPreview.vue'
+import { getHotelLocationOptions } from '@/data/hotelBusinessAreas'
 import HomeSidebar from '@/components/home/HomeSidebar.vue'
 import type {
   HotelCandidate,
+  HotelSearchFilters,
+  TravelPlanDraft,
   TravelMode,
+  TravelItemLocationResult,
   TravelPlan,
   TravelPlanItem,
   TravelPlanItemRequest,
@@ -21,6 +26,7 @@ import { getResponseMessage } from '@/utils/apiError'
 const route = useRoute()
 const router = useRouter()
 const planId = computed(() => Number(route.params.id))
+const startInEditMode = computed(() => route.query.edit === '1')
 const plan = ref<TravelPlan | null>(null)
 const items = ref<TravelPlanItem[]>([])
 const hotels = ref<HotelCandidate[]>([])
@@ -29,13 +35,28 @@ const loading = ref(true)
 const savingPlan = ref(false)
 const savingItem = ref(false)
 const generating = ref(false)
+const enrichingDraft = ref(false)
+const adoptingDraft = ref(false)
 const loadingHotels = ref(false)
+const parsingHotelPreference = ref(false)
+const parsedHotelFilters = ref<HotelSearchFilters | null>(null)
 const busyAction = ref('')
 const editingItem = ref<TravelPlanItem | null>(null)
 const showItemForm = ref(false)
 const itemEditor = ref<HTMLElement | null>(null)
 const message = ref('')
 const messageType = ref<'success' | 'error'>('success')
+const locationResults = ref<Record<number, TravelItemLocationResult>>({})
+const generatedDraft = ref<TravelPlanDraft | null>(null)
+const draftExpiresAt = ref<string | null>(null)
+const draftId = ref<string | null>(null)
+const savedItinerary = ref<HTMLElement | null>(null)
+const selectedHotelName = computed(
+  () =>
+    items.value.find((item) => item.itemType === 'HOTEL' && item.placeName !== '待推荐酒店')
+      ?.placeName ?? null,
+)
+const hotelLocationOptions = computed(() => getHotelLocationOptions(plan.value?.destination))
 
 onMounted(loadPage)
 
@@ -93,6 +114,9 @@ async function savePlan(request: TravelPlanRequest) {
   try {
     plan.value = await travelApi.updatePlan(planId.value, request)
     setMessage('旅行需求已更新。')
+    if (route.query.edit === '1') {
+      await router.replace({ name: 'plan-detail', params: { id: planId.value } })
+    }
   } catch (error) {
     setMessage(getResponseMessage(error) || '旅行需求保存失败。', 'error')
   } finally {
@@ -131,18 +155,21 @@ async function removeItem(item: TravelPlanItem) {
   }
 }
 
-async function generateWithAi() {
-  const warning = items.value.length
-    ? '当前计划已经有行程节点，后端会拒绝自动覆盖。仍要尝试调用吗？'
-    : '这会真实调用 DeepSeek 并消耗接口额度，确定继续吗？'
-  if (!window.confirm(warning)) return
-
+async function generateWithAi(additionalRequirements?: string) {
   generating.value = true
   setMessage('')
   try {
-    const result = await travelApi.generatePlanWithAi(planId.value)
-    items.value = await travelApi.listPlanItems(planId.value)
-    setMessage(result.summary || `已生成 ${result.travelDays} 天结构化行程。`)
+    const result = await travelApi.generatePlanWithAi(planId.value, additionalRequirements)
+    if (!result.draft) {
+      throw new Error('后端仍在返回旧版行程格式，请在 IDEA 中停止后重新启动后端。')
+    }
+    generatedDraft.value = result.draft
+    draftId.value = result.draftId
+    draftExpiresAt.value = result.expiresAt
+    setMessage(
+      result.draft.summary ||
+        `已生成 ${result.draft.travelDays} 天、${result.draft.items.length} 个节点的候选行程。`,
+    )
   } catch (error) {
     setMessage(getResponseMessage(error) || 'DeepSeek 行程生成失败。', 'error')
   } finally {
@@ -150,13 +177,117 @@ async function generateWithAi() {
   }
 }
 
+async function enrichGeneratedDraft() {
+  if (!draftId.value || !generatedDraft.value) return
+
+  const uniqueMissingPlaces = new Set(
+    generatedDraft.value.items
+      .filter(
+        (item) =>
+          (item.itemType === 'ATTRACTION' || item.itemType === 'EVENT') &&
+          (item.longitude == null || item.latitude == null),
+      )
+      .map((item) => item.placeName.trim().toLowerCase()),
+  )
+  const prompt = uniqueMissingPlaces.size
+    ? `将最多查询 ${uniqueMissingPlaces.size} 个缺少坐标的具体地点，并计算本地直线距离。是否继续？`
+    : '这些地点已有本地坐标，本次只在后端计算直线距离，不会请求高德。是否继续？'
+  if (!window.confirm(prompt)) return
+
+  enrichingDraft.value = true
+  try {
+    const result = await travelApi.enrichDraftMap(draftId.value)
+    generatedDraft.value = result.draft
+    draftExpiresAt.value = result.expiresAt
+    setMessage('候选地点和直线距离已更新。你仍然可以只选择满意的节点。')
+  } catch (error) {
+    setMessage(
+      getResponseMessage(error) || '地图补全失败，但候选行程仍然保留，可以继续选择。',
+      'error',
+    )
+  } finally {
+    enrichingDraft.value = false
+  }
+}
+
+async function adoptGeneratedItems(selectedKeys: string[]) {
+  if (!draftId.value || selectedKeys.length === 0) return
+  if (
+    !window.confirm(
+      `确定将选中的 ${selectedKeys.length} 个候选节点加入详细行程吗？已有节点不会被删除。`,
+    )
+  ) {
+    return
+  }
+
+  adoptingDraft.value = true
+  try {
+    const existingIds = new Set(items.value.map((item) => item.id))
+    const selectedDraftItems = (generatedDraft.value?.items ?? [])
+      .filter((item) => selectedKeys.includes(item.draftItemKey))
+      .sort((left, right) => left.dayNumber - right.dayNumber || left.itemOrder - right.itemOrder)
+    const result = await travelApi.adoptDraftItems(draftId.value, selectedKeys)
+    const newlyAddedItems = result.planItems
+      .filter((item) => !existingIds.has(item.id))
+      .sort((left, right) => left.dayNumber - right.dayNumber || left.itemOrder - right.itemOrder)
+
+    const transferredLocations = { ...locationResults.value }
+    selectedDraftItems.forEach((draftItem, index) => {
+      const savedItem = newlyAddedItems[index]
+      if (
+        !savedItem ||
+        !draftItem.imageUrl ||
+        draftItem.longitude == null ||
+        draftItem.latitude == null
+      ) {
+        return
+      }
+      transferredLocations[savedItem.id] = {
+        itemId: savedItem.id,
+        poiId: draftItem.poiId,
+        poiName: draftItem.matchedPoiName || draftItem.placeName,
+        address: draftItem.address,
+        longitude: draftItem.longitude,
+        latitude: draftItem.latitude,
+        cityCode: draftItem.cityCode || '',
+        imageUrl: draftItem.imageUrl,
+        source: 'DRAFT_SESSION',
+        queriedAt: null,
+      }
+    })
+    locationResults.value = transferredLocations
+    items.value = result.planItems
+
+    if (result.draftSession) {
+      draftId.value = result.draftSession.draftId
+      draftExpiresAt.value = result.draftSession.expiresAt
+      generatedDraft.value = result.draftSession.draft
+    } else {
+      draftId.value = null
+      draftExpiresAt.value = null
+      generatedDraft.value = null
+    }
+
+    setMessage(`已将 ${selectedKeys.length} 个候选节点加入详细行程，其他候选和已有节点没有被改动。`)
+    await nextTick()
+    savedItinerary.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  } catch (error) {
+    setMessage(getResponseMessage(error) || '候选节点加入详细行程失败。', 'error')
+  } finally {
+    adoptingDraft.value = false
+  }
+}
+
 async function resolveLocation(item: TravelPlanItem) {
-  if (!window.confirm(`将调用一次高德，为“${item.placeName}”匹配真实地点，是否继续？`)) return
+  const alreadyMatched = item.longitude != null && item.latitude != null
+  const action = alreadyMatched ? '重新匹配' : '匹配'
+  if (!window.confirm(`将调用一次高德，为“${item.placeName}”${action}真实地点，是否继续？`)) return
   busyAction.value = `location-${item.id}`
   try {
-    const result = await travelApi.resolveItemLocation(planId.value, item.id)
+    const result = await travelApi.resolveItemLocation(planId.value, item.id, alreadyMatched)
+    locationResults.value = { ...locationResults.value, [item.id]: result }
     items.value = await travelApi.listPlanItems(planId.value)
-    setMessage(`已匹配：${result.poiName}（${result.source}）`)
+    setMessage(`“${item.placeName}”已匹配到真实地点：${result.poiName}`)
   } catch (error) {
     setMessage(getResponseMessage(error) || '地点匹配失败。', 'error')
   } finally {
@@ -178,11 +309,10 @@ async function calculateRoute(item: TravelPlanItem, mode: TravelMode) {
   }
 }
 
-async function loadHotels() {
-  if (!window.confirm('将真实调用飞猪酒店查询，是否继续？')) return
+async function loadHotels(filters: HotelSearchFilters) {
   loadingHotels.value = true
   try {
-    hotels.value = await travelApi.listHotelCandidates(planId.value)
+    hotels.value = await travelApi.listHotelCandidates(planId.value, filters)
     hotelsLoaded.value = true
     setMessage(`已获得 ${hotels.value.length} 个酒店候选。`)
   } catch (error) {
@@ -190,6 +320,70 @@ async function loadHotels() {
   } finally {
     loadingHotels.value = false
   }
+}
+
+async function parseHotelPreference(preference: string) {
+  parsingHotelPreference.value = true
+  try {
+    const filters = await travelApi.parseHotelPreference(planId.value, preference)
+    parsedHotelFilters.value = filters
+    await loadHotels(filters)
+  } catch (error) {
+    setMessage(getResponseMessage(error) || '住宿需求整理失败，请换一种说法再试。', 'error')
+  } finally {
+    parsingHotelPreference.value = false
+  }
+}
+
+async function selectHotel(hotel: HotelCandidate) {
+  const hotelItem =
+    items.value.find((item) => item.itemType === 'HOTEL' && item.placeName === '待推荐酒店') ??
+    items.value.find((item) => item.itemType === 'HOTEL')
+
+  if (!hotelItem) {
+    setMessage('当前行程没有酒店节点，请先在详细行程中添加一个酒店节点。', 'error')
+    return
+  }
+
+  if (
+    hotelItem.placeName !== '待推荐酒店' &&
+    !window.confirm(`确定把“${hotelItem.placeName}”更换为“${hotel.hotelName}”吗？`)
+  ) {
+    return
+  }
+
+  savingItem.value = true
+  try {
+    await travelApi.updatePlanItem(planId.value, hotelItem.id, {
+      dayNumber: hotelItem.dayNumber,
+      itemOrder: hotelItem.itemOrder,
+      itemType: 'HOTEL',
+      attractionId: null,
+      placeName: hotel.hotelName,
+      address: hotel.address,
+      longitude: parseCoordinate(hotel.longitude, -180, 180),
+      latitude: parseCoordinate(hotel.latitude, -90, 90),
+      startTime: hotelItem.startTime,
+      endTime: hotelItem.endTime,
+      endDayOffset: hotelItem.endDayOffset,
+      transportMode: null,
+      distanceFromPrev: null,
+      travelTimeFromPrev: null,
+      description: hotelItem.description,
+    })
+    items.value = await travelApi.listPlanItems(planId.value)
+    setMessage(`已选择“${hotel.hotelName}”作为住宿。请先匹配上一站位置，再选择交通方式计算路线。`)
+  } catch (error) {
+    setMessage(getResponseMessage(error) || '酒店保存到行程失败。', 'error')
+  } finally {
+    savingItem.value = false
+  }
+}
+
+function parseCoordinate(value: string | null, min: number, max: number) {
+  if (!value) return null
+  const coordinate = Number(value)
+  return Number.isFinite(coordinate) && coordinate >= min && coordinate <= max ? coordinate : null
 }
 </script>
 
@@ -207,8 +401,21 @@ async function loadHotels() {
           :plan="plan"
           :saving="savingPlan"
           :generating="generating"
+          :initially-editing="startInEditMode"
           @save="savePlan"
           @generate="generateWithAi"
+        />
+
+        <TravelDraftPreview
+          v-if="generatedDraft"
+          :draft="generatedDraft"
+          :expires-at="draftExpiresAt"
+          :enriching="enrichingDraft"
+          :adopting="adoptingDraft"
+          :regenerating="generating"
+          @enrich="enrichGeneratedDraft"
+          @adopt="adoptGeneratedItems"
+          @regenerate="generateWithAi"
         />
 
         <div v-if="showItemForm" ref="itemEditor" class="item-editor-anchor">
@@ -221,22 +428,31 @@ async function loadHotels() {
           />
         </div>
 
-        <PlanTimeline
-          :items="items"
-          :travel-days="plan.travelDays"
-          :busy-action="busyAction"
-          @add="openNewItem"
-          @edit="openEditItem"
-          @remove="removeItem"
-          @resolve-location="resolveLocation"
-          @calculate-route="calculateRoute"
-        />
+        <div ref="savedItinerary" class="saved-itinerary">
+          <PlanTimeline
+            :items="items"
+            :travel-days="plan.travelDays"
+            :busy-action="busyAction"
+            :location-results="locationResults"
+            @add="openNewItem"
+            @edit="openEditItem"
+            @remove="removeItem"
+            @resolve-location="resolveLocation"
+            @calculate-route="calculateRoute"
+          />
+        </div>
 
         <HotelCandidateList
           :hotels="hotels"
           :loaded="hotelsLoaded"
           :loading="loadingHotels"
+          :parsing="parsingHotelPreference"
+          :selected-hotel-name="selectedHotelName"
+          :location-options="hotelLocationOptions"
+          :parsed-filters="parsedHotelFilters"
           @load="loadHotels"
+          @parse-preference="parseHotelPreference"
+          @select="selectHotel"
         />
       </template>
     </main>
@@ -244,6 +460,57 @@ async function loadHotels() {
 </template>
 
 <style scoped>
-.page-shell{display:grid;min-height:100vh;background:#faf6f1;grid-template-columns:178px minmax(0,1fr)}main{display:grid;width:min(1180px,calc(100% - 44px));margin:0 auto;padding:34px 0 70px;align-content:start;gap:18px}.back{width:max-content;color:#82746d;font-size:13px;text-decoration:none}.message{position:sticky;z-index:3;top:10px;margin:0;padding:11px 15px;border-radius:12px;background:#edf5ed;color:#416749;box-shadow:var(--shadow-soft);font-size:13px}.message.error{background:#fff0ed;color:#a64f52}.loading{padding:60px;color:var(--text-muted);text-align:center}.item-editor-anchor{scroll-margin-top:18px}
-@media(max-width:900px){.page-shell{display:block}main{padding-top:22px}}
+.page-shell {
+  display: grid;
+  min-height: 100vh;
+  background: #faf6f1;
+  grid-template-columns: 178px minmax(0, 1fr);
+}
+main {
+  display: grid;
+  width: min(1180px, calc(100% - 44px));
+  margin: 0 auto;
+  padding: 34px 0 70px;
+  align-content: start;
+  gap: 18px;
+}
+.back {
+  width: max-content;
+  color: #82746d;
+  font-size: 13px;
+  text-decoration: none;
+}
+.message {
+  position: sticky;
+  z-index: 3;
+  top: 10px;
+  margin: 0;
+  padding: 11px 15px;
+  border-radius: 12px;
+  background: #edf5ed;
+  color: #416749;
+  box-shadow: var(--shadow-soft);
+  font-size: 13px;
+}
+.message.error {
+  background: #fff0ed;
+  color: #a64f52;
+}
+.loading {
+  padding: 60px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.item-editor-anchor,
+.saved-itinerary {
+  scroll-margin-top: 18px;
+}
+@media (max-width: 900px) {
+  .page-shell {
+    display: block;
+  }
+  main {
+    padding-top: 22px;
+  }
+}
 </style>

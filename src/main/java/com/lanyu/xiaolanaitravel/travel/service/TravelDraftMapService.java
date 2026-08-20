@@ -8,10 +8,13 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -26,6 +29,10 @@ import java.util.Set;
  * - 地址
  * - 经纬度
  * - 城市编码
+ * - 同一天有效 POI 之间的直线距离预览
+ *
+ * straightLineDistanceFromPrev 只是地理直线距离，
+ * 不是实际步行、公交、驾车或骑行路线距离。
  *
  * 暂时不负责：
  * - 路线计算
@@ -39,16 +46,14 @@ public class TravelDraftMapService {
     /**
      * 第一版允许自动查询 POI 的节点类型。
      *
-     * REST 和 OTHER 暂时不自动查询，
-     * 避免把“休息”“整理行李”“自由活动”
-     * 之类的非真实地点发送给高德。
+     * 当前只补全具体景点和活动。
+     * FOOD、HOTEL、REST 和 OTHER 由各自业务流程处理，
+     * 避免把泛化餐厅、待推荐酒店、休息或返程等节点发送给高德。
      */
     private static final Set<String> LOCATION_ITEM_TYPES =
             Set.of(
                     "ATTRACTION",
-                    "EVENT",
-                    "FOOD",
-                    "HOTEL"
+                    "EVENT"
             );
 
     /**
@@ -71,11 +76,14 @@ public class TravelDraftMapService {
             );
 
     private final AmapService amapService;
+    private final TravelDistanceService travelDistanceService;
 
     public TravelDraftMapService(
-            AmapService amapService) {
+            AmapService amapService,
+            TravelDistanceService travelDistanceService) {
 
         this.amapService = amapService;
+        this.travelDistanceService = travelDistanceService;
     }
 
     /**
@@ -176,6 +184,98 @@ public class TravelDraftMapService {
                     item,
                     matchedPoi.get()
             );
+        }
+
+        return draft;
+    }
+
+    /**
+     * 根据 Draft 中已有的经纬度，
+     * 计算同一天相邻有效地点之间的直线距离预览。
+     *
+     * 该方法不会调用高德或数据库，
+     * 也不会修改实际路线相关字段。
+     */
+    public TravelPlanDraft enrichStraightLineDistances(
+            TravelPlanDraft draft) {
+
+        if (draft == null) {
+            throw new IllegalArgumentException(
+                    "候选旅行方案不能为空"
+            );
+        }
+
+        List<TravelPlanDraftItem> items =
+                draft.getItems();
+
+        if (items == null || items.isEmpty()) {
+            return draft;
+        }
+
+        for (TravelPlanDraftItem item : items) {
+            if (item != null) {
+                item.setStraightLineDistanceFromPrev(null);
+            }
+        }
+
+        List<TravelPlanDraftItem> sortedItems =
+                new ArrayList<>(items);
+
+        Comparator<TravelPlanDraftItem> itemComparator =
+                Comparator.comparing(
+                                TravelPlanDraftItem::getDayNumber,
+                                Comparator.nullsLast(Integer::compareTo)
+                        )
+                        .thenComparing(
+                                TravelPlanDraftItem::getItemOrder,
+                                Comparator.nullsLast(Integer::compareTo)
+                        );
+
+        sortedItems.sort(
+                Comparator.nullsLast(itemComparator)
+        );
+
+        Integer currentDayNumber = null;
+        boolean firstItem = true;
+        TravelPlanDraftItem previousLocatedItem = null;
+
+        for (TravelPlanDraftItem currentItem : sortedItems) {
+            if (currentItem == null) {
+                continue;
+            }
+
+            if (firstItem
+                    || !Objects.equals(
+                    currentDayNumber,
+                    currentItem.getDayNumber())) {
+
+                currentDayNumber =
+                        currentItem.getDayNumber();
+
+                previousLocatedItem = null;
+                firstItem = false;
+            }
+
+            if (!hasCoordinate(currentItem)) {
+                continue;
+            }
+
+            if (previousLocatedItem != null) {
+                int distanceMeters =
+                        travelDistanceService
+                                .calculateStraightLineDistanceMeters(
+                                        previousLocatedItem.getLongitude(),
+                                        previousLocatedItem.getLatitude(),
+                                        currentItem.getLongitude(),
+                                        currentItem.getLatitude()
+                                );
+
+                currentItem.setStraightLineDistanceFromPrev(
+                        distanceMeters
+                );
+            }
+
+            previousLocatedItem = currentItem;
         }
 
         return draft;
@@ -351,6 +451,22 @@ public class TravelDraftMapService {
         item.setCityCode(
                 normalize(poi.getCitycode())
         );
+
+        if (item.getImageUrl() == null) {
+            item.setImageUrl(firstPhotoUrl(poi));
+        }
+    }
+
+    private String firstPhotoUrl(AmapPoiItem poi) {
+        if (poi.getPhotos() == null) {
+            return null;
+        }
+        return poi.getPhotos().stream()
+                .filter(Objects::nonNull)
+                .map(photo -> normalize(photo.getUrl()))
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
     }
 
     /**

@@ -89,6 +89,7 @@ function signOut() {
         <form class="top-search" role="search" @submit.prevent="searchCity">
           <span aria-hidden="true">⌕</span>
           <input v-model="searchText" type="search" placeholder="搜索厦门、成都或苏州" />
+          <button type="submit">搜索</button>
         </form>
         <span v-if="searchMessage" class="search-message" role="status">{{ searchMessage }}</span>
         <button class="notification" type="button" disabled title="消息中心暂未开放" aria-label="消息中心暂未开放">♧</button>
@@ -174,6 +175,15 @@ function signOut() {
   background: transparent;
   color: #554b47;
   font-size: 11px;
+}
+
+.top-search button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--coral);
+  cursor: pointer;
+  font-size: 12px;
 }
 
 .search-message {

@@ -3,6 +3,8 @@ package com.lanyu.xiaolanaitravel.amap.dto;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * 高德 POI 2.0 返回的单个地点数据。
  *
@@ -68,4 +70,7 @@ public class AmapPoiItem {
      * POI 类型编码。
      */
     private String typecode;
+
+    /** 与本次 POI 搜索结果一起返回的图片，不会额外发起请求。 */
+    private List<AmapPoiPhoto> photos;
 }

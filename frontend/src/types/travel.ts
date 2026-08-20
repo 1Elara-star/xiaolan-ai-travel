@@ -21,13 +21,7 @@ export interface TravelPlan extends TravelPlanRequest {
 }
 
 export type TravelItemType =
-  | 'ATTRACTION'
-  | 'FOOD'
-  | 'SHOPPING'
-  | 'HOTEL'
-  | 'EVENT'
-  | 'REST'
-  | 'OTHER'
+  'ATTRACTION' | 'FOOD' | 'SHOPPING' | 'HOTEL' | 'EVENT' | 'REST' | 'OTHER'
 
 export type TravelMode = 'WALKING' | 'DRIVING' | 'BICYCLING' | 'TRANSIT'
 
@@ -53,6 +47,8 @@ export interface TravelPlanItem extends TravelPlanItemRequest {
   id: number
   planId: number
   cityCode: string | null
+  straightLineDistanceFromPrev: number | null
+  imageUrl: string | null
   createTime: string | null
   updateTime: string | null
 }
@@ -65,6 +61,7 @@ export interface TravelItemLocationResult {
   longitude: number
   latitude: number
   cityCode: string
+  imageUrl: string | null
   source: string
   queriedAt: string | null
 }
@@ -91,6 +88,28 @@ export interface HotelCandidate {
   star: string | null
   brandName: string | null
   source: string
+  priceValue: number | null
+  tripMatchScore: number
+  profileMatchScore: number
+  overallMatchScore: number
+  profileUsed: boolean
+  recommendationReasons: string[]
+}
+
+export type HotelLocationType =
+  | 'BUSINESS_AREA'
+  | 'TRANSPORT_HUB'
+  | 'METRO_STATION'
+  | 'SCENIC_AREA'
+  | 'LANDMARK'
+  | 'ADMINISTRATIVE_AREA'
+  | 'CUSTOM'
+
+export interface HotelSearchFilters {
+  locationType?: HotelLocationType
+  locationKeyword?: string
+  minPrice?: number
+  maxPrice?: number
 }
 
 export interface AiTravelItem {
@@ -113,4 +132,54 @@ export interface AiTravelPlanResult {
   travelDays: number
   summary: string | null
   days: AiTravelDay[]
+}
+
+export interface TravelPlanDraftItem {
+  draftItemKey: string
+  attractionId: number | null
+  sourceType: 'FAVORITE' | 'LOCAL_ATTRACTION' | 'AI_RECOMMENDED'
+  dayNumber: number
+  itemOrder: number
+  itemType: string
+  placeName: string
+  startTime: string | null
+  endTime: string | null
+  endDayOffset: number
+  description: string | null
+  imageUrl: string | null
+  storyBackground: string | null
+  featureDescription: string | null
+  suitableTags: string | null
+  suggestDuration: number | null
+  openTime: string | null
+  ticketInfo: string | null
+  poiId: string | null
+  matchedPoiName: string | null
+  address: string | null
+  longitude: number | null
+  latitude: number | null
+  cityCode: string | null
+  transportMode: string | null
+  distanceFromPrev: number | null
+  travelTimeFromPrev: number | null
+  straightLineDistanceFromPrev: number | null
+}
+
+export interface TravelPlanDraft {
+  planId: number
+  destination: string
+  travelDays: number
+  summary: string | null
+  items: TravelPlanDraftItem[]
+}
+
+export interface TravelDraftSessionResponse {
+  draftId: string
+  expiresAt: string
+  draft: TravelPlanDraft
+}
+
+export interface TravelDraftConfirmationResponse {
+  planItems: TravelPlanItem[]
+  draftSession: TravelDraftSessionResponse | null
 }

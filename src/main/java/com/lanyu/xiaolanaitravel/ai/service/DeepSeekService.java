@@ -38,13 +38,7 @@ public class DeepSeekService {
      */
     public String chat(String message) {
 
-        Map<String, Object> requestBody = Map.of(
-                "model", model,
-
-                "messages", List.of(
-                        Map.of(
-                                "role", "system",
-                                "content", """
+        String systemPrompt = """
                                 你叫小兰，是一个 AI 旅行规划助手。
 
                                 你的任务是根据用户已经确认的旅行需求，
@@ -67,6 +61,7 @@ public class DeepSeekService {
                                       "theme": "当天主题",
                                       "items": [
                                         {
+                                          "attractionId": null,
                                           "placeName": "地点名称",
                                           "startTime": "09:00",
                                           "endTime": "11:00",
@@ -161,13 +156,42 @@ public class DeepSeekService {
                                    应减少每天地点数量并预留休息时间。
 
                                 6. 不要因为缺少实时信息而自行虚构事实。
-                                """
-                        ),
 
-                        Map.of(
-                                "role", "user",
-                                "content", message
-                        )
+                                7. ATTRACTION 和 EVENT 必须尽量填写可核验的具体地点名称，
+                                   不要使用“海边栈道”“热门商圈”“特色景点”等泛化名称。
+
+                                8. 用户提供的收藏景点是高优先级偏好，但不要求全部强塞进行程。
+                                   使用输入中明确提供 attractionId 的景点时，必须返回对应的真实 ID；
+                                   使用输入资料中不存在的地点时 attractionId 必须填写 null，不得编造 ID。
+
+                                9. 没有可靠的具体餐厅时，可以写“某区域附近用餐（待选择）”，
+                                   不要虚构具体餐厅名称。
+                                """;
+
+        return requestJson(systemPrompt, message);
+    }
+
+    /**
+     * 使用指定系统提示词调用 DeepSeek，并将结构化 JSON 转换为目标类型。
+     */
+    public <T> T generateStructuredResponse(
+            String systemPrompt,
+            String userMessage,
+            Class<T> responseType) {
+        String json = requestJson(systemPrompt, userMessage);
+        try {
+            return objectMapper.readValue(json, responseType);
+        } catch (JsonProcessingException exception) {
+            throw new RuntimeException("DeepSeek返回的结构化JSON解析失败", exception);
+        }
+    }
+
+    private String requestJson(String systemPrompt, String userMessage) {
+        Map<String, Object> requestBody = Map.of(
+                "model", model,
+                "messages", List.of(
+                        Map.of("role", "system", "content", systemPrompt),
+                        Map.of("role", "user", "content", userMessage)
                 ),
 
                 "response_format", Map.of(

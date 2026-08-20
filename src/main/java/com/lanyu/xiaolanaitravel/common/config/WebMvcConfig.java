@@ -27,7 +27,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(jwtInterceptor)
                 .addPathPatterns("/user/me", "/user/me/**", "/user/profile", "/user/profile/**",
                         "/travel/plan", "/travel/plan/**", "/favorites", "/favorites/**",
-                        "/memories", "/memories/**", "/ai/test", "/admin", "/admin/**");
+                        "/travel/draft", "/travel/draft/**", "/memories", "/memories/**",
+                        "/ai/test", "/admin", "/admin/**");
         registry.addInterceptor(adminInterceptor)
                 .addPathPatterns("/ai/test", "/admin", "/admin/**");
     }

@@ -11,6 +11,18 @@ defineProps<{
 const emit = defineEmits<{
   save: []
 }>()
+
+const tagIdeas: Record<string, string> = {
+  海边: '想去海边住几天，看看日落，行程不要太赶',
+  小众城市: '想找一座游客不太多的小城市，慢慢逛当地街区',
+  历史文化: '想安排一次以历史建筑和当地故事为主的旅行',
+  美食之旅: '想围绕当地特色美食规划旅行，也想留出散步时间',
+}
+
+function selectTag(tag: string) {
+  activeTag.value = tag
+  travelIdea.value = tagIdeas[tag] ?? tag
+}
 </script>
 
 <template>
@@ -37,7 +49,7 @@ const emit = defineEmits<{
             :key="tag"
             type="button"
             :class="{ active: activeTag === tag }"
-            @click="activeTag = tag"
+            @click="selectTag(tag)"
           >
             {{ tag }}
           </button>

@@ -38,8 +38,7 @@ public class TravelPlanItemController {
     public List<TravelPlanItemResponse> getMyPlanItems(
             @RequestAttribute("currentUserId") Long userId,
             @PathVariable Long planId) {
-        return travelPlanItemService.getMyPlanItems(userId, planId).stream()
-                .map(travelPlanItemService::toResponse).toList();
+        return travelPlanItemService.getMyPlanItemResponses(userId, planId);
     }
 
     @PostMapping

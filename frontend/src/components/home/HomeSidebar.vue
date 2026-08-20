@@ -62,6 +62,13 @@ withDefaults(
       >
         <span aria-hidden="true">♙</span>{{ isAuthenticated ? displayName : '登录' }}
       </RouterLink>
+      <RouterLink
+        v-if="authStore.user?.role === 'ADMIN'"
+        class="nav-item admin-entry"
+        :to="{ name: 'admin' }"
+      >
+        <span aria-hidden="true">⚙</span>管理后台
+      </RouterLink>
     </nav>
 
     <div class="assistant-note">
@@ -159,6 +166,16 @@ withDefaults(
   background: var(--coral-light);
 }
 
+.admin-entry {
+  border: 1px solid rgba(65, 91, 75, 0.12);
+  background: rgba(229, 239, 232, 0.7);
+  color: #355645;
+}
+
+.admin-entry:hover {
+  background: #dcebe0;
+}
+
 .nav-item:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -220,7 +237,9 @@ withDefaults(
 
   .primary-nav {
     display: flex;
+    min-width: 0;
     margin-left: auto;
+    overflow-x: auto;
   }
 
   .nav-item {
@@ -236,9 +255,27 @@ withDefaults(
     font-size: 24px;
   }
 
-  .brand-en,
-  .primary-nav .nav-item:nth-child(n + 3) {
+  .brand-en {
     display: none;
+  }
+
+  .brand {
+    flex: 0 0 auto;
+  }
+
+  .primary-nav {
+    max-width: calc(100vw - 82px);
+    gap: 2px;
+    scrollbar-width: none;
+  }
+
+  .primary-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-item {
+    flex: 0 0 auto;
+    padding: 0 8px;
   }
 }
 </style>

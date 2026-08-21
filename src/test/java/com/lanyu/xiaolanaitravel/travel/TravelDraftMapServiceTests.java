@@ -2,6 +2,8 @@ package com.lanyu.xiaolanaitravel.travel;
 
 import com.lanyu.xiaolanaitravel.amap.dto.AmapPoiItem;
 import com.lanyu.xiaolanaitravel.amap.dto.AmapPoiPhoto;
+import com.lanyu.xiaolanaitravel.amap.service.AmapPoiMatcher;
+import com.lanyu.xiaolanaitravel.amap.service.AmapPoiSearchCache;
 import com.lanyu.xiaolanaitravel.amap.service.AmapService;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraft;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraftItem;
@@ -75,6 +77,42 @@ class TravelDraftMapServiceTests {
         verify(amapService, times(1)).searchPois("夫子庙", "南京", 3);
         assertPoiFields(first, "南京夫子庙");
         assertPoiFields(second, "南京夫子庙");
+    }
+
+    @Test
+    void samePlaceAcrossDifferentDraftsUsesProcessCache() {
+        AmapService amapService = mock(AmapService.class);
+        TravelDraftMapService service = service(
+                amapService,
+                mock(TravelDistanceService.class));
+        AmapPoiItem poi = poi("B001", "夫子庙", "贡院街152号",
+                "118.796877,32.020694", "025");
+        when(amapService.searchPois("夫子庙", "南京", 3)).thenReturn(List.of(poi));
+
+        TravelPlanDraftItem first = draftItem("ATTRACTION", "夫子庙");
+        TravelPlanDraftItem second = draftItem("ATTRACTION", "夫子庙");
+        service.enrichLocations(draft("南京", first));
+        service.enrichLocations(draft("南京", second));
+
+        verify(amapService, times(1)).searchPois("夫子庙", "南京", 3);
+        assertPoiFields(first, "夫子庙");
+        assertPoiFields(second, "夫子庙");
+    }
+
+    @Test
+    void poiFromAnotherCityIsRejected() {
+        AmapService amapService = mock(AmapService.class);
+        TravelPlanDraftItem item = draftItem("ATTRACTION", "中山公园");
+        TravelPlanDraft draft = draft("厦门", item);
+        AmapPoiItem poi = poi("B002", "中山公园", "长宁路780号",
+                "121.422000,31.218000", "021");
+        poi.setCityname("上海市");
+        when(amapService.searchPois("中山公园", "厦门", 3)).thenReturn(List.of(poi));
+
+        service(amapService, mock(TravelDistanceService.class)).enrichLocations(draft);
+
+        assertNull(item.getLongitude());
+        assertNull(item.getLatitude());
     }
 
     @Test
@@ -211,7 +249,11 @@ class TravelDraftMapServiceTests {
     private TravelDraftMapService service(
             AmapService amapService,
             TravelDistanceService distanceService) {
-        return new TravelDraftMapService(amapService, distanceService);
+        return new TravelDraftMapService(
+                amapService,
+                distanceService,
+                new AmapPoiSearchCache(),
+                new AmapPoiMatcher());
     }
 
     private void assertPoiFields(TravelPlanDraftItem item, String matchedPoiName) {
@@ -235,6 +277,7 @@ class TravelDraftMapServiceTests {
         poi.setAddress(address);
         poi.setLocation(location);
         poi.setCitycode(cityCode);
+        poi.setCityname("南京市");
         return poi;
     }
 }

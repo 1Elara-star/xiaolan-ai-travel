@@ -4,6 +4,8 @@ import com.lanyu.xiaolanaitravel.amap.dto.AmapPoiItem;
 import com.lanyu.xiaolanaitravel.amap.dto.AmapPoiPhoto;
 import com.lanyu.xiaolanaitravel.amap.dto.AmapRouteResult;
 import com.lanyu.xiaolanaitravel.amap.dto.AmapTravelMode;
+import com.lanyu.xiaolanaitravel.amap.service.AmapPoiMatcher;
+import com.lanyu.xiaolanaitravel.amap.service.AmapPoiSearchCache;
 import com.lanyu.xiaolanaitravel.amap.service.AmapService;
 import com.lanyu.xiaolanaitravel.travel.entity.TravelPlan;
 import com.lanyu.xiaolanaitravel.travel.entity.TravelPlanItem;
@@ -41,6 +43,7 @@ class TravelMapServiceTests {
         poi.setAddress("思明区大学路");
         poi.setLocation("118.090000,24.430000");
         poi.setCitycode("0592");
+        poi.setCityname("厦门市");
         AmapPoiPhoto photo = new AmapPoiPhoto();
         photo.setUrl("https://example.test/baicheng.jpg");
         poi.setPhotos(List.of(photo));
@@ -52,7 +55,9 @@ class TravelMapServiceTests {
         var response = new TravelMapService(
                 planService,
                 mapper,
-                amapService
+                amapService,
+                new AmapPoiSearchCache(),
+                new AmapPoiMatcher()
         ).resolveItemLocation(7L, 12L, 2L, false);
 
         assertEquals("https://example.test/baicheng.jpg", response.imageUrl());
@@ -92,7 +97,9 @@ class TravelMapServiceTests {
         var response = new TravelMapService(
                 planService,
                 mapper,
-                amapService
+                amapService,
+                new AmapPoiSearchCache(),
+                new AmapPoiMatcher()
         ).calculateRouteFromPrevious(
                 7L, 12L, 2L, AmapTravelMode.BICYCLING, false
         );

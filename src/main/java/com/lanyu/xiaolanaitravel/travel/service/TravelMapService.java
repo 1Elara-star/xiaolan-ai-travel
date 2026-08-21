@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.lanyu.xiaolanaitravel.amap.dto.AmapPoiItem;
 import com.lanyu.xiaolanaitravel.amap.dto.AmapRouteResult;
 import com.lanyu.xiaolanaitravel.amap.dto.AmapTravelMode;
+import com.lanyu.xiaolanaitravel.amap.service.AmapPoiMatcher;
+import com.lanyu.xiaolanaitravel.amap.service.AmapPoiSearchCache;
 import com.lanyu.xiaolanaitravel.amap.service.AmapService;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelItemLocationResponse;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelItemRouteResponse;
@@ -26,14 +28,20 @@ public class TravelMapService {
     private final TravelPlanService travelPlanService;
     private final TravelPlanItemMapper travelPlanItemMapper;
     private final AmapService amapService;
+    private final AmapPoiSearchCache poiSearchCache;
+    private final AmapPoiMatcher poiMatcher;
 
     public TravelMapService(
             TravelPlanService travelPlanService,
             TravelPlanItemMapper travelPlanItemMapper,
-            AmapService amapService) {
+            AmapService amapService,
+            AmapPoiSearchCache poiSearchCache,
+            AmapPoiMatcher poiMatcher) {
         this.travelPlanService = travelPlanService;
         this.travelPlanItemMapper = travelPlanItemMapper;
         this.amapService = amapService;
+        this.poiSearchCache = poiSearchCache;
+        this.poiMatcher = poiMatcher;
     }
 
     /**
@@ -64,9 +72,17 @@ public class TravelMapService {
                     "DATABASE_CACHE", null);
         }
 
-        List<AmapPoiItem> candidates = amapService.searchPois(
-                item.getPlaceName(), plan.getDestination(), 3);
-        AmapPoiItem selected = selectBestPoi(item.getPlaceName(), candidates);
+        List<AmapPoiItem> candidates = poiSearchCache.getOrLoad(
+                item.getPlaceName(),
+                plan.getDestination(),
+                3,
+                refresh,
+                () -> amapService.searchPois(item.getPlaceName(), plan.getDestination(), 3));
+        AmapPoiItem selected = poiMatcher.findBest(
+                        item.getPlaceName(), plan.getDestination(), candidates)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "高德没有找到当前目的地内的对应地点"));
         BigDecimal[] coordinate = parseCoordinate(selected.getLocation());
 
         item.setAddress(resolveAddress(selected));
@@ -179,22 +195,6 @@ public class TravelMapService {
         return previous;
     }
 
-    private AmapPoiItem selectBestPoi(String placeName, List<AmapPoiItem> candidates) {
-        if (candidates == null || candidates.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "高德没有找到对应地点");
-        }
-        return candidates.stream()
-                .filter(candidate -> candidate != null && hasCoordinate(candidate.getLocation()))
-                .filter(candidate -> candidate.getName() != null
-                        && candidate.getName().strip().equalsIgnoreCase(placeName.strip()))
-                .findFirst()
-                .orElseGet(() -> candidates.stream()
-                        .filter(candidate -> candidate != null && hasCoordinate(candidate.getLocation()))
-                        .findFirst()
-                        .orElseThrow(() -> new ResponseStatusException(
-                                HttpStatus.BAD_GATEWAY, "高德地点结果缺少经纬度")));
-    }
-
     private BigDecimal[] parseCoordinate(String location) {
         try {
             String[] parts = location.split(",", -1);
@@ -250,10 +250,6 @@ public class TravelMapService {
             }
         }
         return result.isEmpty() ? null : result.toString();
-    }
-
-    private boolean hasCoordinate(String location) {
-        return location != null && location.contains(",");
     }
 
     private void requireCoordinate(TravelPlanItem item, String message) {

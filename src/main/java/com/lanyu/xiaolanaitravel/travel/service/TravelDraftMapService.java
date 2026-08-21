@@ -1,6 +1,8 @@
 package com.lanyu.xiaolanaitravel.travel.service;
 
 import com.lanyu.xiaolanaitravel.amap.dto.AmapPoiItem;
+import com.lanyu.xiaolanaitravel.amap.service.AmapPoiMatcher;
+import com.lanyu.xiaolanaitravel.amap.service.AmapPoiSearchCache;
 import com.lanyu.xiaolanaitravel.amap.service.AmapService;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraft;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraftItem;
@@ -77,13 +79,19 @@ public class TravelDraftMapService {
 
     private final AmapService amapService;
     private final TravelDistanceService travelDistanceService;
+    private final AmapPoiSearchCache poiSearchCache;
+    private final AmapPoiMatcher poiMatcher;
 
     public TravelDraftMapService(
             AmapService amapService,
-            TravelDistanceService travelDistanceService) {
+            TravelDistanceService travelDistanceService,
+            AmapPoiSearchCache poiSearchCache,
+            AmapPoiMatcher poiMatcher) {
 
         this.amapService = amapService;
         this.travelDistanceService = travelDistanceService;
+        this.poiSearchCache = poiSearchCache;
+        this.poiMatcher = poiMatcher;
     }
 
     /**
@@ -329,82 +337,14 @@ public class TravelDraftMapService {
             String placeName,
             String destination) {
 
-        List<AmapPoiItem> candidates =
-                amapService.searchPois(
-                        placeName,
-                        destination,
-                        3
-                );
+        List<AmapPoiItem> candidates = poiSearchCache.getOrLoad(
+                placeName,
+                destination,
+                3,
+                () -> amapService.searchPois(placeName, destination, 3)
+        );
 
-        if (candidates == null
-                || candidates.isEmpty()) {
-
-            return Optional.empty();
-        }
-
-        String normalizedPlaceName =
-                normalizeName(placeName);
-
-        /*
-         * 第一优先级：
-         * 名称完全一致。
-         */
-        Optional<AmapPoiItem> exactMatch =
-                candidates.stream()
-                        .filter(this::isUsablePoi)
-                        .filter(candidate ->
-                                normalizeName(
-                                        candidate.getName()
-                                ).equals(
-                                        normalizedPlaceName
-                                )
-                        )
-                        .findFirst();
-
-        if (exactMatch.isPresent()) {
-            return exactMatch;
-        }
-
-        /*
-         * 第二优先级：
-         * 名称存在包含关系。
-         *
-         * 例如：
-         *
-         * AI：夫子庙
-         * 高德：南京夫子庙
-         */
-        Optional<AmapPoiItem> containsMatch =
-                candidates.stream()
-                        .filter(this::isUsablePoi)
-                        .filter(candidate -> {
-
-                            String candidateName =
-                                    normalizeName(
-                                            candidate.getName()
-                                    );
-
-                            return candidateName.contains(
-                                    normalizedPlaceName
-                            ) || normalizedPlaceName.contains(
-                                    candidateName
-                            );
-                        })
-                        .findFirst();
-
-        if (containsMatch.isPresent()) {
-            return containsMatch;
-        }
-
-        /*
-         * 第三优先级：
-         * 高德已经根据“地点 + 城市”进行了搜索，
-         * 如果没有完全匹配，
-         * 使用第一个拥有合法经纬度的候选结果。
-         */
-        return candidates.stream()
-                .filter(this::isUsablePoi)
-                .findFirst();
+        return poiMatcher.findBest(placeName, destination, candidates);
     }
 
     /**
@@ -467,29 +407,6 @@ public class TravelDraftMapService {
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null);
-    }
-
-    /**
-     * 判断高德候选 POI 是否至少拥有合法经纬度。
-     */
-    private boolean isUsablePoi(
-            AmapPoiItem poi) {
-
-        if (poi == null) {
-            return false;
-        }
-
-        try {
-            parseCoordinate(
-                    poi.getLocation()
-            );
-
-            return true;
-
-        } catch (IllegalArgumentException exception) {
-
-            return false;
-        }
     }
 
     /**

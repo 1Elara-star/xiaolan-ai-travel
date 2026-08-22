@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import * as travelApi from '@/api/travel'
+import AttractionRecommendationList from '@/components/travel/AttractionRecommendationList.vue'
 import HotelCandidateList from '@/components/travel/HotelCandidateList.vue'
 import PlanItemForm from '@/components/travel/PlanItemForm.vue'
 import PlanOverviewCard from '@/components/travel/PlanOverviewCard.vue'
@@ -11,6 +12,7 @@ import TravelDraftPreview from '@/components/travel/TravelDraftPreview.vue'
 import { getHotelLocationOptions } from '@/data/hotelBusinessAreas'
 import HomeSidebar from '@/components/home/HomeSidebar.vue'
 import type {
+  AttractionRecommendation,
   HotelCandidate,
   HotelSearchFilters,
   TravelPlanDraft,
@@ -30,6 +32,10 @@ const startInEditMode = computed(() => route.query.edit === '1')
 const plan = ref<TravelPlan | null>(null)
 const items = ref<TravelPlanItem[]>([])
 const hotels = ref<HotelCandidate[]>([])
+const attractionRecommendations = ref<AttractionRecommendation[]>([])
+const recommendationsLoaded = ref(false)
+const loadingRecommendations = ref(false)
+const addingAttractionId = ref<number | null>(null)
 const hotelsLoaded = ref(false)
 const loading = ref(true)
 const savingPlan = ref(false)
@@ -75,6 +81,7 @@ async function loadPage() {
     ])
     plan.value = savedPlan
     items.value = savedItems
+    await loadAttractionRecommendations()
     const notice = sessionStorage.getItem('xiaolan-plan-notice')
     if (notice) {
       sessionStorage.removeItem('xiaolan-plan-notice')
@@ -84,6 +91,55 @@ async function loadPage() {
     setMessage(getResponseMessage(error) || '暂时无法读取这份行程。', 'error')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadAttractionRecommendations() {
+  if (!Number.isInteger(planId.value) || planId.value <= 0) return
+  loadingRecommendations.value = true
+  try {
+    attractionRecommendations.value = await travelApi.listAttractionRecommendations(planId.value)
+    recommendationsLoaded.value = true
+  } catch (error) {
+    setMessage(getResponseMessage(error) || '个性化景点推荐读取失败。', 'error')
+  } finally {
+    loadingRecommendations.value = false
+  }
+}
+
+async function addRecommendedAttraction(
+  recommendation: AttractionRecommendation,
+  dayNumber: number,
+) {
+  const attraction = recommendation.attraction
+  const dayItems = items.value.filter((item) => item.dayNumber === dayNumber)
+  const itemOrder = Math.max(0, ...dayItems.map((item) => item.itemOrder)) + 1
+  addingAttractionId.value = attraction.id
+  try {
+    await travelApi.createPlanItem(planId.value, {
+      dayNumber,
+      itemOrder,
+      itemType: 'ATTRACTION',
+      attractionId: attraction.id,
+      placeName: attraction.name,
+      address: attraction.address,
+      longitude: attraction.longitude,
+      latitude: attraction.latitude,
+      startTime: null,
+      endTime: null,
+      endDayOffset: 0,
+      transportMode: null,
+      distanceFromPrev: null,
+      travelTimeFromPrev: null,
+      description: attraction.popularReason || attraction.subtitle || null,
+    })
+    items.value = await travelApi.listPlanItems(planId.value)
+    await loadAttractionRecommendations()
+    setMessage(`已将“${attraction.name}”加入 Day ${dayNumber}，时间可以在详细行程中继续编辑。`)
+  } catch (error) {
+    setMessage(getResponseMessage(error) || '推荐景点加入行程失败。', 'error')
+  } finally {
+    addingAttractionId.value = null
   }
 }
 
@@ -404,6 +460,16 @@ function parseCoordinate(value: string | null, min: number, max: number) {
           :initially-editing="startInEditMode"
           @save="savePlan"
           @generate="generateWithAi"
+        />
+
+        <AttractionRecommendationList
+          :recommendations="attractionRecommendations"
+          :travel-days="plan.travelDays"
+          :loading="loadingRecommendations"
+          :loaded="recommendationsLoaded"
+          :adding-attraction-id="addingAttractionId"
+          @reload="loadAttractionRecommendations"
+          @add="addRecommendedAttraction"
         />
 
         <TravelDraftPreview

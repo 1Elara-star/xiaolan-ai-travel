@@ -112,6 +112,41 @@ export interface HotelSearchFilters {
   maxPrice?: number
 }
 
+export interface RecommendedAttraction {
+  id: number
+  name: string
+  city: string
+  subtitle: string
+  category: string
+  image: string
+  story: string
+  popularReason: string
+  tags: string[]
+  suggestedDuration: string
+  photoTip: string
+  reminder: string
+  address: string | null
+  longitude: number | null
+  latitude: number | null
+  type: string | null
+  openTime: string | null
+  ticketInfo: string | null
+}
+
+export interface AttractionRecommendation {
+  attraction: RecommendedAttraction
+  matchPercentage: number
+  profileScore: number
+  tripScore: number
+  favoriteScore: number
+  geographyScore: number
+  dislikePenalty: number
+  nearestPlanDistanceMeters: number | null
+  favorite: boolean
+  profileUsed: boolean
+  recommendationReasons: string[]
+}
+
 export interface AiTravelItem {
   placeName: string
   startTime: string | null

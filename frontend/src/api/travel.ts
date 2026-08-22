@@ -1,5 +1,6 @@
 import http from '@/api/http'
 import type {
+  AttractionRecommendation,
   HotelCandidate,
   HotelSearchFilters,
   TravelDraftConfirmationResponse,
@@ -12,6 +13,17 @@ import type {
   TravelPlanItemRequest,
   TravelPlanRequest,
 } from '@/types/travel'
+
+export async function listAttractionRecommendations(
+  planId: number,
+  limit = 10,
+): Promise<AttractionRecommendation[]> {
+  const response = await http.get<AttractionRecommendation[]>(
+    `/travel/plan/${planId}/recommendations/attractions`,
+    { params: { limit } },
+  )
+  return response.data
+}
 
 export async function createPlan(request: TravelPlanRequest): Promise<TravelPlan> {
   const response = await http.post<TravelPlan>('/travel/plan', request)

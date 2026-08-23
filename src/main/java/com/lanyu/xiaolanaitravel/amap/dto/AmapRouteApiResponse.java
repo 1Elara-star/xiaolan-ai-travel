@@ -1,6 +1,7 @@
 package com.lanyu.xiaolanaitravel.amap.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.util.List;
@@ -37,6 +38,56 @@ public class AmapRouteApiResponse {
         /** 路线总距离，单位：米。 */
         private String distance;
         private Cost cost;
+        private String nightflag;
+        private List<TransitSegment> segments;
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class TransitSegment {
+        private Bus bus;
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Bus {
+        private List<BusLine> buslines;
+    }
+
+    /** 公交或地铁线路信息，字段名称与高德响应保持对应。 */
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class BusLine {
+        private String name;
+        private String type;
+        private String distance;
+        private String duration;
+
+        @JsonProperty("departure_stop")
+        private TransitStop departureStop;
+
+        @JsonProperty("arrival_stop")
+        private TransitStop arrivalStop;
+
+        @JsonProperty("start_time")
+        private String startTime;
+
+        @JsonProperty("end_time")
+        private String endTime;
+
+        @JsonProperty("station_start_time")
+        private String stationStartTime;
+
+        @JsonProperty("station_end_time")
+        private String stationEndTime;
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class TransitStop {
+        private String name;
+        private String id;
+        private String location;
     }
 
     @Data

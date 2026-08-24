@@ -4,6 +4,7 @@ package com.lanyu.xiaolanaitravel.ai.agent.planner;
 public record PlannerAgentStepResult(
         PlannerToolName tool,
         String reason,
+        Object toolInput,
         Object toolResult
 ) {
 }

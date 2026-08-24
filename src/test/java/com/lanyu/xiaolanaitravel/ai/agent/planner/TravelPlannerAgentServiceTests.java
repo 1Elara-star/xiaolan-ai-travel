@@ -49,7 +49,7 @@ class TravelPlannerAgentServiceTests {
                         8L, "鼓浪屿", "厦门", List.of("海岛")))
         );
         PlannerAgentStepResult expected = new PlannerAgentStepResult(
-                PlannerToolName.AMAP_POI_SEARCH, "需要真实坐标", null);
+                PlannerToolName.AMAP_POI_SEARCH, "需要真实坐标", null, null);
         when(plannerContextService.build(7L, 12L)).thenReturn(context);
         when(plannerAgentService.executeNextStep(
                 org.mockito.ArgumentMatchers.any(PlannerAgentRequest.class)))

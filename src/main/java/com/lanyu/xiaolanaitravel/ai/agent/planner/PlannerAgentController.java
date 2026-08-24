@@ -14,9 +14,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class PlannerAgentController {
 
     private final TravelPlannerAgentService travelPlannerAgentService;
+    private final PlannerWorkflowService plannerWorkflowService;
 
-    public PlannerAgentController(TravelPlannerAgentService travelPlannerAgentService) {
+    public PlannerAgentController(
+            TravelPlannerAgentService travelPlannerAgentService,
+            PlannerWorkflowService plannerWorkflowService) {
         this.travelPlannerAgentService = travelPlannerAgentService;
+        this.plannerWorkflowService = plannerWorkflowService;
     }
 
     @PostMapping("/step")
@@ -26,5 +30,14 @@ public class PlannerAgentController {
             @Valid @RequestBody PlannerStepRequest request) {
         return travelPlannerAgentService.executeStep(
                 userId, planId, request.userRequest());
+    }
+
+    /** 执行最多五次 Tool 调用的受控 Planner Workflow。 */
+    @PostMapping("/run")
+    public PlannerWorkflowResponse runWorkflow(
+            @RequestAttribute("currentUserId") Long userId,
+            @PathVariable Long planId,
+            @Valid @RequestBody PlannerStepRequest request) {
+        return plannerWorkflowService.run(userId, planId, request.userRequest());
     }
 }

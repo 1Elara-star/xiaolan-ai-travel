@@ -69,6 +69,11 @@ public class PlannerAgentService {
 
     /** 执行一次 Planner 决策；最多调用一个 Tool。 */
     public PlannerAgentStepResult executeNextStep(PlannerAgentRequest request) {
+        return executeDecision(decideNextStep(request));
+    }
+
+    /** 只让 Planner 选择下一步，不执行任何 Tool。 */
+    public PlannerToolDecision decideNextStep(PlannerAgentRequest request) {
         validateRequest(request);
 
         PlannerToolDecision decision = deepSeekService.generateStructuredResponse(
@@ -77,7 +82,12 @@ public class PlannerAgentService {
                 PlannerToolDecision.class
         );
         validateDecision(decision);
+        return decision;
+    }
 
+    /** 执行一项已经通过白名单与参数校验的 Planner 决策。 */
+    public PlannerAgentStepResult executeDecision(PlannerToolDecision decision) {
+        validateDecision(decision);
         Object toolResult = switch (decision.tool()) {
             case NONE -> null;
             case AMAP_POI_SEARCH -> amapPoiSearchTool.execute(decision.poiSearch());
@@ -88,8 +98,18 @@ public class PlannerAgentService {
         return new PlannerAgentStepResult(
                 decision.tool(),
                 decision.reason().strip(),
+                toolInput(decision),
                 toolResult
         );
+    }
+
+    private Object toolInput(PlannerToolDecision decision) {
+        return switch (decision.tool()) {
+            case NONE -> null;
+            case AMAP_POI_SEARCH -> decision.poiSearch();
+            case AMAP_TRANSIT_ROUTE -> decision.transitRoute();
+            case FLYAI_HOTEL_SEARCH -> decision.hotelSearch();
+        };
     }
 
     private String buildUserMessage(PlannerAgentRequest request) {
@@ -100,7 +120,7 @@ public class PlannerAgentService {
                 【当前已知上下文】
                 %s
 
-                【上一次 Tool 结果】
+                【本次 Workflow 已取得的 Tool 结果】
                 %s
                 """.formatted(
                 request.userRequest().strip(),

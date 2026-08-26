@@ -1,13 +1,10 @@
 package com.lanyu.xiaolanaitravel.ai.agent.planner;
 
 import com.lanyu.xiaolanaitravel.ai.service.DeepSeekService;
-import com.lanyu.xiaolanaitravel.ai.tool.amap.AmapPoiSearchTool;
-import com.lanyu.xiaolanaitravel.ai.tool.amap.AmapTransitRouteTool;
 import com.lanyu.xiaolanaitravel.ai.tool.amap.dto.AmapPoiSearchToolRequest;
 import com.lanyu.xiaolanaitravel.ai.tool.amap.dto.AmapPoiSearchToolResult;
 import com.lanyu.xiaolanaitravel.ai.tool.amap.dto.AmapTransitRouteToolRequest;
 import com.lanyu.xiaolanaitravel.ai.tool.amap.dto.AmapTransitRouteToolResult;
-import com.lanyu.xiaolanaitravel.ai.tool.flyai.FlyAiHotelSearchTool;
 import com.lanyu.xiaolanaitravel.ai.tool.flyai.dto.FlyAiHotelSearchToolRequest;
 import com.lanyu.xiaolanaitravel.ai.tool.flyai.dto.FlyAiHotelSearchToolResult;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +25,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,18 +33,13 @@ class PlannerAgentServiceTests {
     @Mock
     private DeepSeekService deepSeekService;
     @Mock
-    private AmapPoiSearchTool poiSearchTool;
-    @Mock
-    private AmapTransitRouteTool transitRouteTool;
-    @Mock
-    private FlyAiHotelSearchTool hotelSearchTool;
+    private PlannerToolExecutor plannerToolExecutor;
 
     private PlannerAgentService service;
 
     @BeforeEach
     void setUp() {
-        service = new PlannerAgentService(
-                deepSeekService, poiSearchTool, transitRouteTool, hotelSearchTool);
+        service = new PlannerAgentService(deepSeekService, plannerToolExecutor);
     }
 
     @Test
@@ -59,17 +50,17 @@ class PlannerAgentServiceTests {
                 "B001", "鼓浪屿", "厦门市思明区",
                 new BigDecimal("118.067000"), new BigDecimal("24.447000"),
                 "0592", null);
-        mockDecision(new PlannerToolDecision(
+        PlannerToolDecision decision = new PlannerToolDecision(
                 PlannerToolName.AMAP_POI_SEARCH, "需要先取得真实坐标",
-                toolRequest, null, null));
-        when(poiSearchTool.execute(toolRequest)).thenReturn(toolResult);
+                toolRequest, null, null);
+        mockDecision(decision);
+        when(plannerToolExecutor.execute(decision)).thenReturn(toolResult);
 
         PlannerAgentStepResult result = service.executeNextStep(request());
 
         assertEquals(PlannerToolName.AMAP_POI_SEARCH, result.tool());
         assertSame(toolResult, result.toolResult());
-        verify(poiSearchTool).execute(toolRequest);
-        verifyNoInteractions(transitRouteTool, hotelSearchTool);
+        verify(plannerToolExecutor).execute(decision);
     }
 
     @Test
@@ -81,16 +72,16 @@ class PlannerAgentServiceTests {
         AmapTransitRouteToolResult toolResult = new AmapTransitRouteToolResult(
                 2584, 2100, 35, false,
                 "2026-08-23", "22:30", List.of());
-        mockDecision(new PlannerToolDecision(
+        PlannerToolDecision decision = new PlannerToolDecision(
                 PlannerToolName.AMAP_TRANSIT_ROUTE, "已有坐标，需要核对末班车",
-                null, toolRequest, null));
-        when(transitRouteTool.execute(toolRequest)).thenReturn(toolResult);
+                null, toolRequest, null);
+        mockDecision(decision);
+        when(plannerToolExecutor.execute(decision)).thenReturn(toolResult);
 
         PlannerAgentStepResult result = service.executeNextStep(request());
 
         assertSame(toolResult, result.toolResult());
-        verify(transitRouteTool).execute(toolRequest);
-        verifyNoInteractions(poiSearchTool, hotelSearchTool);
+        verify(plannerToolExecutor).execute(decision);
     }
 
     @Test
@@ -99,28 +90,29 @@ class PlannerAgentServiceTests {
                 new FlyAiHotelSearchToolRequest("成都", "春熙路", 600, 5);
         FlyAiHotelSearchToolResult toolResult =
                 new FlyAiHotelSearchToolResult(List.of(), 0);
-        mockDecision(new PlannerToolDecision(
+        PlannerToolDecision decision = new PlannerToolDecision(
                 PlannerToolName.FLYAI_HOTEL_SEARCH, "需要真实酒店候选",
-                null, null, toolRequest));
-        when(hotelSearchTool.execute(toolRequest)).thenReturn(toolResult);
+                null, null, toolRequest);
+        mockDecision(decision);
+        when(plannerToolExecutor.execute(decision)).thenReturn(toolResult);
 
         PlannerAgentStepResult result = service.executeNextStep(request());
 
         assertSame(toolResult, result.toolResult());
-        verify(hotelSearchTool).execute(toolRequest);
-        verifyNoInteractions(poiSearchTool, transitRouteTool);
+        verify(plannerToolExecutor).execute(decision);
     }
 
     @Test
     void shouldNotExecuteAnyToolWhenPlannerSelectsNone() {
-        mockDecision(new PlannerToolDecision(
-                PlannerToolName.NONE, "当前问题不需要外部事实", null, null, null));
+        PlannerToolDecision decision = new PlannerToolDecision(
+                PlannerToolName.NONE, "当前问题不需要外部事实", null, null, null);
+        mockDecision(decision);
 
         PlannerAgentStepResult result = service.executeNextStep(request());
 
         assertEquals(PlannerToolName.NONE, result.tool());
         assertNull(result.toolResult());
-        verifyNoInteractions(poiSearchTool, transitRouteTool, hotelSearchTool);
+        verify(plannerToolExecutor).execute(decision);
     }
 
     @Test
@@ -129,14 +121,14 @@ class PlannerAgentServiceTests {
                 new AmapPoiSearchToolRequest("鼓浪屿", "厦门", 3);
         FlyAiHotelSearchToolRequest hotelRequest =
                 new FlyAiHotelSearchToolRequest("厦门", null, null, 5);
-        mockDecision(new PlannerToolDecision(
+        PlannerToolDecision decision = new PlannerToolDecision(
                 PlannerToolName.AMAP_POI_SEARCH, "错误的多工具参数",
-                poiRequest, null, hotelRequest));
+                poiRequest, null, hotelRequest);
+        mockDecision(decision);
 
         assertThrows(ResponseStatusException.class,
                 () -> service.executeNextStep(request()));
-        verify(poiSearchTool, never()).execute(poiRequest);
-        verifyNoInteractions(transitRouteTool, hotelSearchTool);
+        verify(plannerToolExecutor, never()).execute(decision);
     }
 
     private void mockDecision(PlannerToolDecision decision) {

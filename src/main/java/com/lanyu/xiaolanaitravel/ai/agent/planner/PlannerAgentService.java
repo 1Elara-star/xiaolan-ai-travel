@@ -1,9 +1,6 @@
 package com.lanyu.xiaolanaitravel.ai.agent.planner;
 
 import com.lanyu.xiaolanaitravel.ai.service.DeepSeekService;
-import com.lanyu.xiaolanaitravel.ai.tool.amap.AmapPoiSearchTool;
-import com.lanyu.xiaolanaitravel.ai.tool.amap.AmapTransitRouteTool;
-import com.lanyu.xiaolanaitravel.ai.tool.flyai.FlyAiHotelSearchTool;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -52,19 +49,13 @@ public class PlannerAgentService {
             """;
 
     private final DeepSeekService deepSeekService;
-    private final AmapPoiSearchTool amapPoiSearchTool;
-    private final AmapTransitRouteTool amapTransitRouteTool;
-    private final FlyAiHotelSearchTool flyAiHotelSearchTool;
+    private final PlannerToolExecutor plannerToolExecutor;
 
     public PlannerAgentService(
             DeepSeekService deepSeekService,
-            AmapPoiSearchTool amapPoiSearchTool,
-            AmapTransitRouteTool amapTransitRouteTool,
-            FlyAiHotelSearchTool flyAiHotelSearchTool) {
+            PlannerToolExecutor plannerToolExecutor) {
         this.deepSeekService = deepSeekService;
-        this.amapPoiSearchTool = amapPoiSearchTool;
-        this.amapTransitRouteTool = amapTransitRouteTool;
-        this.flyAiHotelSearchTool = flyAiHotelSearchTool;
+        this.plannerToolExecutor = plannerToolExecutor;
     }
 
     /** 执行一次 Planner 决策；最多调用一个 Tool。 */
@@ -88,12 +79,7 @@ public class PlannerAgentService {
     /** 执行一项已经通过白名单与参数校验的 Planner 决策。 */
     public PlannerAgentStepResult executeDecision(PlannerToolDecision decision) {
         validateDecision(decision);
-        Object toolResult = switch (decision.tool()) {
-            case NONE -> null;
-            case AMAP_POI_SEARCH -> amapPoiSearchTool.execute(decision.poiSearch());
-            case AMAP_TRANSIT_ROUTE -> amapTransitRouteTool.execute(decision.transitRoute());
-            case FLYAI_HOTEL_SEARCH -> flyAiHotelSearchTool.execute(decision.hotelSearch());
-        };
+        Object toolResult = plannerToolExecutor.execute(decision);
 
         return new PlannerAgentStepResult(
                 decision.tool(),

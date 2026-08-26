@@ -12,12 +12,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.ai.support.ToolCallbacks;
+import org.springframework.ai.tool.ToolCallback;
 
 import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -74,6 +78,38 @@ class AmapPoiSearchToolTests {
         ));
 
         verify(amapService, never()).searchPois("", "厦门", 3);
+    }
+
+    @Test
+    void shouldExposeSpringAiToolDefinition() {
+        ToolCallback[] callbacks = ToolCallbacks.from(tool);
+
+        assertEquals(1, callbacks.length);
+        assertEquals("amapPoiSearch", callbacks[0].getToolDefinition().name());
+        assertTrue(callbacks[0].getToolDefinition().description().contains("真实POI信息"));
+
+        String inputSchema = callbacks[0].getToolDefinition().inputSchema();
+        assertTrue(inputSchema.contains("keyword"));
+        assertTrue(inputSchema.contains("city"));
+        assertTrue(inputSchema.contains("limit"));
+        assertFalse(inputSchema.contains("AmapPoiSearchToolRequest"));
+
+        verify(amapService, never()).searchPois("鼓浪屿", "厦门", 3);
+    }
+
+    @Test
+    void shouldExecuteSpringAiToolCallbackWithMockedAmap() {
+        AmapPoiItem poi = createPoi();
+        when(amapService.searchPois("鼓浪屿", "厦门", 3)).thenReturn(List.of(poi));
+        ToolCallback callback = ToolCallbacks.from(tool)[0];
+
+        String result = callback.call("""
+                {"keyword":"鼓浪屿","city":"厦门","limit":3}
+                """);
+
+        assertTrue(result.contains("B0FFG123"));
+        assertTrue(result.contains("鼓浪屿"));
+        verify(amapService).searchPois("鼓浪屿", "厦门", 3);
     }
 
     private AmapPoiItem createPoi() {

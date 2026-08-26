@@ -6,6 +6,8 @@ import com.lanyu.xiaolanaitravel.amap.dto.AmapPoiItem;
 import com.lanyu.xiaolanaitravel.amap.service.AmapPoiMatcher;
 import com.lanyu.xiaolanaitravel.amap.service.AmapPoiSearchCache;
 import com.lanyu.xiaolanaitravel.amap.service.AmapService;
+import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -45,6 +47,22 @@ public class AmapPoiSearchTool {
         this.amapService = amapService;
         this.poiSearchCache = poiSearchCache;
         this.poiMatcher = poiMatcher;
+    }
+
+    /**
+     * 提供给 Spring AI 的地点查询入口。
+     *
+     * <p>当前仅声明 Tool 元数据，是否执行仍由受控 Planner Workflow 决定。</p>
+     */
+    @Tool(
+            name = "amapPoiSearch",
+            description = "查询中国境内具体地点的真实POI信息，包括名称、地址、经纬度、城市编码和可用图片。需要明确地点关键词和所在城市时使用，不用于路线规划。"
+    )
+    public AmapPoiSearchToolResult searchPoi(
+            @ToolParam(description = "具体地点关键词，例如鼓浪屿、夫子庙") String keyword,
+            @ToolParam(description = "地点所在城市，例如厦门、南京") String city,
+            @ToolParam(description = "候选地点数量，允许1到5，缺省时使用3", required = false) Integer limit) {
+        return execute(new AmapPoiSearchToolRequest(keyword, city, limit));
     }
 
 

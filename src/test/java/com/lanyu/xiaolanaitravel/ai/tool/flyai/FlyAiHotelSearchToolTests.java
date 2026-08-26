@@ -11,11 +11,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.ai.support.ToolCallbacks;
+import org.springframework.ai.tool.ToolCallback;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -71,6 +75,41 @@ class FlyAiHotelSearchToolTests {
         ));
 
         verify(flyAiService, never()).searchHotels("成都", null, -1);
+    }
+
+    @Test
+    void shouldExposeSpringAiHotelToolDefinition() {
+        ToolCallback[] callbacks = ToolCallbacks.from(tool);
+
+        assertEquals(1, callbacks.length);
+        assertEquals("flyAiHotelSearch", callbacks[0].getToolDefinition().name());
+        assertTrue(callbacks[0].getToolDefinition().description().contains("真实酒店候选"));
+
+        String inputSchema = callbacks[0].getToolDefinition().inputSchema();
+        assertTrue(inputSchema.contains("destination"));
+        assertTrue(inputSchema.contains("locationKeyword"));
+        assertTrue(inputSchema.contains("maxPrice"));
+        assertFalse(inputSchema.contains("FlyAiHotelSearchToolRequest"));
+    }
+
+    @Test
+    void shouldExecuteSpringAiHotelToolCallbackWithMockedFlyAi() {
+        when(flyAiService.searchHotels("成都", "春熙路", 600))
+                .thenReturn(responseWith(hotel("酒店A", "399")));
+        ToolCallback callback = ToolCallbacks.from(tool)[0];
+
+        String result = callback.call("""
+                {
+                  "destination": "成都",
+                  "locationKeyword": "春熙路",
+                  "maxPrice": 600,
+                  "limit": 5
+                }
+                """);
+
+        assertTrue(result.contains("酒店A"));
+        assertTrue(result.contains("399"));
+        verify(flyAiService).searchHotels("成都", "春熙路", 600);
     }
 
     private FlyAiHotelResponse responseWith(FlyAiHotelItem... hotels) {

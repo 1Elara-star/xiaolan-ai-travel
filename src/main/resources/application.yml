@@ -1,6 +1,16 @@
 spring:
   application:
     name: xiaolan-ai-travel
+  ai:
+    model:
+      chat: deepseek
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY}
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      chat:
+        model: ${DEEPSEEK_MODEL:deepseek-v4-flash}
+        thinking:
+          type: disabled
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: ${DB_URL:jdbc:mysql://localhost:3306/ai_travel?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
@@ -28,11 +38,6 @@ mybatis-plus:
 jwt:
   secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:86400000}
-
-deepseek:
-  api-key: ${DEEPSEEK_API_KEY}
-  base-url: https://api.deepseek.com
-  model: deepseek-v4-flash
 
 amap:
   api-key: ${AMAP_API_KEY}

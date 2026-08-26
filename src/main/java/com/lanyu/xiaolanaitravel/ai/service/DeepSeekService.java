@@ -3,34 +3,28 @@ package com.lanyu.xiaolanaitravel.ai.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lanyu.xiaolanaitravel.ai.dto.AiTravelPlanResponse;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.deepseek.DeepSeekChatOptions;
+import org.springframework.ai.deepseek.api.ResponseFormat;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
-
-import java.util.List;
-import java.util.Map;
 
 @Service
 public class DeepSeekService {
 
-    private final RestClient restClient;
-    private final String model;
+    private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
 
+    @Autowired
     public DeepSeekService(
-            @Value("${deepseek.api-key}") String apiKey,
-            @Value("${deepseek.base-url}") String baseUrl,
-            @Value("${deepseek.model}") String model,
+            ChatClient.Builder chatClientBuilder,
             ObjectMapper objectMapper) {
+        this(chatClientBuilder.build(), objectMapper);
+    }
 
-        this.model = model;
+    DeepSeekService(ChatClient chatClient, ObjectMapper objectMapper) {
+        this.chatClient = chatClient;
         this.objectMapper = objectMapper;
-
-        this.restClient = RestClient.builder()
-                .baseUrl(baseUrl)
-                .defaultHeader("Authorization", "Bearer " + apiKey)
-                .build();
     }
 
     /**
@@ -187,38 +181,21 @@ public class DeepSeekService {
     }
 
     private String requestJson(String systemPrompt, String userMessage) {
-        Map<String, Object> requestBody = Map.of(
-                "model", model,
-                "messages", List.of(
-                        Map.of("role", "system", "content", systemPrompt),
-                        Map.of("role", "user", "content", userMessage)
-                ),
+        String content = chatClient.prompt()
+                .system(systemPrompt)
+                .user(userMessage)
+                .options(DeepSeekChatOptions.builder()
+                        .responseFormat(ResponseFormat.builder()
+                                .type(ResponseFormat.Type.JSON_OBJECT)
+                                .build())
+                        .build())
+                .call()
+                .content();
 
-                "response_format", Map.of(
-                        "type", "json_object"
-                ),
-
-                "thinking", Map.of(
-                        "type", "disabled"
-                ),
-
-                "stream", false
-        );
-
-        Map response = restClient.post()
-                .uri("/chat/completions")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(requestBody)
-                .retrieve()
-                .body(Map.class);
-
-        List<Map<String, Object>> choices =
-                (List<Map<String, Object>>) response.get("choices");
-
-        Map<String, Object> messageObject =
-                (Map<String, Object>) choices.get(0).get("message");
-
-        return (String) messageObject.get("content");
+        if (content == null || content.isBlank()) {
+            throw new RuntimeException("DeepSeek返回内容为空");
+        }
+        return content;
     }
 
     /**

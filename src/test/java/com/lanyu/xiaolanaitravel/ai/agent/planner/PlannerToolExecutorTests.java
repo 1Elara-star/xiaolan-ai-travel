@@ -33,7 +33,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -78,9 +78,11 @@ class PlannerToolExecutorTests {
         when(amapService.searchPois("鼓浪屿", "厦门", 3)).thenReturn(List.of(poi));
 
         Object result = executor.execute(new PlannerToolDecision(
+                PlannerActionType.CALL_TOOL,
                 PlannerToolName.AMAP_POI_SEARCH,
                 "查询真实地点",
                 new AmapPoiSearchToolRequest("鼓浪屿", "厦门", 3),
+                null,
                 null,
                 null
         ));
@@ -106,6 +108,7 @@ class PlannerToolExecutorTests {
                 .thenReturn(new AmapTransitRouteResult(2584, 2100, false, List.of(line)));
 
         Object result = executor.execute(new PlannerToolDecision(
+                PlannerActionType.CALL_TOOL,
                 PlannerToolName.AMAP_TRANSIT_ROUTE,
                 "查询真实公交路线",
                 null,
@@ -113,6 +116,7 @@ class PlannerToolExecutorTests {
                         new BigDecimal("118.080000"), new BigDecimal("24.450000"),
                         new BigDecimal("118.120000"), new BigDecimal("24.520000"),
                         "0592", "0592", "2026-08-23", "22:30", true),
+                null,
                 null
         ));
 
@@ -135,11 +139,13 @@ class PlannerToolExecutorTests {
         when(flyAiService.searchHotels("成都", "春熙路", 600)).thenReturn(response);
 
         Object result = executor.execute(new PlannerToolDecision(
+                PlannerActionType.CALL_TOOL,
                 PlannerToolName.FLYAI_HOTEL_SEARCH,
                 "查询真实酒店",
                 null,
                 null,
-                new FlyAiHotelSearchToolRequest("成都", "春熙路", 600, 5)
+                new FlyAiHotelSearchToolRequest("成都", "春熙路", 600, 5),
+                null
         ));
 
         FlyAiHotelSearchToolResult hotelResult = assertInstanceOf(
@@ -150,16 +156,18 @@ class PlannerToolExecutorTests {
     }
 
     @Test
-    void shouldNotCallExternalServicesForNone() {
-        Object result = executor.execute(new PlannerToolDecision(
+    void shouldRejectFinalDraftBecauseItIsNotAToolCall() {
+        PlannerToolDecision decision = new PlannerToolDecision(
+                PlannerActionType.FINAL_DRAFT,
                 PlannerToolName.NONE,
                 "不需要外部数据",
                 null,
                 null,
+                null,
                 null
-        ));
+        );
 
-        assertNull(result);
+        assertThrows(IllegalArgumentException.class, () -> executor.execute(decision));
         verifyNoInteractions(amapService, flyAiService);
     }
 }

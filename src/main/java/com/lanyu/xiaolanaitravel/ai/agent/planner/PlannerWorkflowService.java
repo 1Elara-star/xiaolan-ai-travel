@@ -2,6 +2,7 @@ package com.lanyu.xiaolanaitravel.ai.agent.planner;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lanyu.xiaolanaitravel.ai.dto.AiTravelPlanResponse;
 import com.lanyu.xiaolanaitravel.ai.tool.amap.dto.AmapPoiSearchToolResult;
 import com.lanyu.xiaolanaitravel.ai.tool.amap.dto.AmapTransitRouteToolResult;
 import com.lanyu.xiaolanaitravel.ai.tool.flyai.dto.FlyAiHotelSearchToolResult;
@@ -15,8 +16,9 @@ import java.util.Set;
 /**
  * 第一版受控 Planner Workflow。
  *
- * <p>最多执行五次白名单 Tool；每一步只执行一个 Tool。当前只收集事实，
- * 不生成正式行程、不写数据库，也不接入 RAG 或 Repair。</p>
+ * <p>最多执行五次白名单 Tool；每一步只执行一个 Tool。每次执行结果都会重新
+ * 交给同一个 Planner 角色，直到返回最终结构化候选行程。当前不写数据库，
+ * 也不接入 RAG、固定校验或 Repair。</p>
  */
 @Service
 public class PlannerWorkflowService {
@@ -47,7 +49,7 @@ public class PlannerWorkflowService {
         Set<String> executedFingerprints = new HashSet<>();
         int toolCallCount = 0;
 
-        while (toolCallCount < MAX_TOOL_CALLS) {
+        while (true) {
             PlannerToolDecision decision;
             try {
                 decision = plannerAgentService.decideNextStep(new PlannerAgentRequest(
@@ -58,12 +60,14 @@ public class PlannerWorkflowService {
             } catch (RuntimeException exception) {
                 return response(PlannerWorkflowStatus.PARTIAL_FAILURE, toolCallCount,
                         steps, poiFacts, transitFacts, hotelFacts,
+                        null,
                         "Planner决策失败，请稍后重试");
             }
 
-            if (decision.tool() == PlannerToolName.NONE) {
+            if (decision.action() == PlannerActionType.FINAL_DRAFT) {
                 steps.add(new PlannerWorkflowStep(
                         steps.size() + 1,
+                        decision.action(),
                         PlannerToolName.NONE,
                         decision.reason().strip(),
                         null,
@@ -71,7 +75,15 @@ public class PlannerWorkflowService {
                         null
                 ));
                 return response(PlannerWorkflowStatus.COMPLETED, toolCallCount,
-                        steps, poiFacts, transitFacts, hotelFacts, null);
+                        steps, poiFacts, transitFacts, hotelFacts,
+                        decision.finalPlan(), null);
+            }
+
+            if (toolCallCount >= MAX_TOOL_CALLS) {
+                return response(PlannerWorkflowStatus.STEP_LIMIT_REACHED, toolCallCount,
+                        steps, poiFacts, transitFacts, hotelFacts,
+                        null,
+                        "已达到单次Workflow最多5次Tool调用限制，尚未生成最终方案");
             }
 
             Object toolInput = toolInput(decision);
@@ -79,6 +91,7 @@ public class PlannerWorkflowService {
             if (!executedFingerprints.add(fingerprint)) {
                 steps.add(new PlannerWorkflowStep(
                         steps.size() + 1,
+                        decision.action(),
                         decision.tool(),
                         decision.reason().strip(),
                         toolInput,
@@ -87,6 +100,7 @@ public class PlannerWorkflowService {
                 ));
                 return response(PlannerWorkflowStatus.REPEATED_TOOL_CALL_BLOCKED,
                         toolCallCount, steps, poiFacts, transitFacts, hotelFacts,
+                        null,
                         "Planner尝试重复调用相同Tool");
             }
 
@@ -95,6 +109,7 @@ public class PlannerWorkflowService {
                 toolCallCount++;
                 steps.add(new PlannerWorkflowStep(
                         steps.size() + 1,
+                        result.action(),
                         result.tool(),
                         result.reason(),
                         result.toolInput(),
@@ -105,6 +120,7 @@ public class PlannerWorkflowService {
             } catch (RuntimeException exception) {
                 steps.add(new PlannerWorkflowStep(
                         steps.size() + 1,
+                        decision.action(),
                         decision.tool(),
                         decision.reason().strip(),
                         toolInput,
@@ -113,13 +129,10 @@ public class PlannerWorkflowService {
                 ));
                 return response(PlannerWorkflowStatus.PARTIAL_FAILURE, toolCallCount,
                         steps, poiFacts, transitFacts, hotelFacts,
+                        null,
                         "部分外部事实获取失败，已保留先前成功结果");
             }
         }
-
-        return response(PlannerWorkflowStatus.STEP_LIMIT_REACHED, toolCallCount,
-                steps, poiFacts, transitFacts, hotelFacts,
-                "已达到单次Workflow最多5次Tool调用限制");
     }
 
     private Object toolInput(PlannerToolDecision decision) {
@@ -152,12 +165,14 @@ public class PlannerWorkflowService {
             List<AmapPoiSearchToolResult> poiFacts,
             List<AmapTransitRouteToolResult> transitFacts,
             List<FlyAiHotelSearchToolResult> hotelFacts,
+            AiTravelPlanResponse finalPlan,
             String errorMessage) {
         return new PlannerWorkflowResponse(
                 status,
                 toolCallCount,
                 steps,
                 new PlannerWorkflowFacts(poiFacts, transitFacts, hotelFacts),
+                finalPlan,
                 errorMessage
         );
     }

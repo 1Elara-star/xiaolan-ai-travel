@@ -1,5 +1,7 @@
 package com.lanyu.xiaolanaitravel.ai.agent.planner;
 
+import com.lanyu.xiaolanaitravel.ai.dto.AiTravelDay;
+import com.lanyu.xiaolanaitravel.ai.dto.AiTravelPlanResponse;
 import com.lanyu.xiaolanaitravel.ai.service.DeepSeekService;
 import com.lanyu.xiaolanaitravel.ai.tool.amap.dto.AmapPoiSearchToolRequest;
 import com.lanyu.xiaolanaitravel.ai.tool.amap.dto.AmapPoiSearchToolResult;
@@ -51,14 +53,16 @@ class PlannerAgentServiceTests {
                 new BigDecimal("118.067000"), new BigDecimal("24.447000"),
                 "0592", null);
         PlannerToolDecision decision = new PlannerToolDecision(
+                PlannerActionType.CALL_TOOL,
                 PlannerToolName.AMAP_POI_SEARCH, "需要先取得真实坐标",
-                toolRequest, null, null);
+                toolRequest, null, null, null);
         mockDecision(decision);
         when(plannerToolExecutor.execute(decision)).thenReturn(toolResult);
 
         PlannerAgentStepResult result = service.executeNextStep(request());
 
         assertEquals(PlannerToolName.AMAP_POI_SEARCH, result.tool());
+        assertEquals(PlannerActionType.CALL_TOOL, result.action());
         assertSame(toolResult, result.toolResult());
         verify(plannerToolExecutor).execute(decision);
     }
@@ -73,8 +77,9 @@ class PlannerAgentServiceTests {
                 2584, 2100, 35, false,
                 "2026-08-23", "22:30", List.of());
         PlannerToolDecision decision = new PlannerToolDecision(
+                PlannerActionType.CALL_TOOL,
                 PlannerToolName.AMAP_TRANSIT_ROUTE, "已有坐标，需要核对末班车",
-                null, toolRequest, null);
+                null, toolRequest, null, null);
         mockDecision(decision);
         when(plannerToolExecutor.execute(decision)).thenReturn(toolResult);
 
@@ -91,8 +96,9 @@ class PlannerAgentServiceTests {
         FlyAiHotelSearchToolResult toolResult =
                 new FlyAiHotelSearchToolResult(List.of(), 0);
         PlannerToolDecision decision = new PlannerToolDecision(
+                PlannerActionType.CALL_TOOL,
                 PlannerToolName.FLYAI_HOTEL_SEARCH, "需要真实酒店候选",
-                null, null, toolRequest);
+                null, null, toolRequest, null);
         mockDecision(decision);
         when(plannerToolExecutor.execute(decision)).thenReturn(toolResult);
 
@@ -103,16 +109,21 @@ class PlannerAgentServiceTests {
     }
 
     @Test
-    void shouldNotExecuteAnyToolWhenPlannerSelectsNone() {
+    void shouldReturnFinalDraftWithoutExecutingTool() {
+        AiTravelPlanResponse finalPlan = validFinalPlan();
         PlannerToolDecision decision = new PlannerToolDecision(
-                PlannerToolName.NONE, "当前问题不需要外部事实", null, null, null);
+                PlannerActionType.FINAL_DRAFT,
+                PlannerToolName.NONE, "事实已经足够",
+                null, null, null, finalPlan);
         mockDecision(decision);
 
         PlannerAgentStepResult result = service.executeNextStep(request());
 
         assertEquals(PlannerToolName.NONE, result.tool());
+        assertEquals(PlannerActionType.FINAL_DRAFT, result.action());
         assertNull(result.toolResult());
-        verify(plannerToolExecutor).execute(decision);
+        assertSame(finalPlan, result.finalPlan());
+        verify(plannerToolExecutor, never()).execute(decision);
     }
 
     @Test
@@ -122,8 +133,9 @@ class PlannerAgentServiceTests {
         FlyAiHotelSearchToolRequest hotelRequest =
                 new FlyAiHotelSearchToolRequest("厦门", null, null, 5);
         PlannerToolDecision decision = new PlannerToolDecision(
+                PlannerActionType.CALL_TOOL,
                 PlannerToolName.AMAP_POI_SEARCH, "错误的多工具参数",
-                poiRequest, null, hotelRequest);
+                poiRequest, null, hotelRequest, null);
         mockDecision(decision);
 
         assertThrows(ResponseStatusException.class,
@@ -142,5 +154,16 @@ class PlannerAgentServiceTests {
                 "演唱会结束后还能坐地铁回酒店吗？",
                 "已经拥有场馆和酒店的真实坐标与城市编码",
                 null);
+    }
+
+    private AiTravelPlanResponse validFinalPlan() {
+        AiTravelDay day = new AiTravelDay();
+        day.setDayNumber(1);
+        day.setItems(List.of());
+        AiTravelPlanResponse plan = new AiTravelPlanResponse();
+        plan.setDestination("厦门");
+        plan.setTravelDays(1);
+        plan.setDays(List.of(day));
+        return plan;
     }
 }

@@ -1,10 +1,12 @@
 package com.lanyu.xiaolanaitravel.travel;
 
+import com.lanyu.xiaolanaitravel.ai.agent.planner.PlannerWorkflowFacts;
+import com.lanyu.xiaolanaitravel.ai.agent.planner.PlannerWorkflowResponse;
+import com.lanyu.xiaolanaitravel.ai.agent.planner.PlannerWorkflowService;
+import com.lanyu.xiaolanaitravel.ai.agent.planner.PlannerWorkflowStatus;
 import com.lanyu.xiaolanaitravel.ai.dto.AiTravelPlanResponse;
-import com.lanyu.xiaolanaitravel.ai.service.DeepSeekService;
-import com.lanyu.xiaolanaitravel.amap.service.AmapService;
-import com.lanyu.xiaolanaitravel.favorite.service.AttractionFavoriteService;
 import com.lanyu.xiaolanaitravel.explore.service.ExploreService;
+import com.lanyu.xiaolanaitravel.favorite.service.AttractionFavoriteService;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftSession;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftSessionResponse;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraft;
@@ -14,41 +16,37 @@ import com.lanyu.xiaolanaitravel.travel.service.TravelDraftAttractionService;
 import com.lanyu.xiaolanaitravel.travel.service.TravelDraftSessionService;
 import com.lanyu.xiaolanaitravel.travel.service.TravelPlanDraftService;
 import com.lanyu.xiaolanaitravel.travel.service.TravelPlanService;
-import com.lanyu.xiaolanaitravel.user.service.UserProfileService;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class TravelAiGenerationServiceTests {
 
     @Test
-    void generatesAndCreatesDraftSessionWithoutCallingAmap() {
+    void createsDraftSessionOnlyAfterPlannerReturnsFinalDraft() {
         TravelPlanService planService = mock(TravelPlanService.class);
-        DeepSeekService deepSeekService = mock(DeepSeekService.class);
+        PlannerWorkflowService workflowService = mock(PlannerWorkflowService.class);
         TravelPlanDraftService draftService = mock(TravelPlanDraftService.class);
         AttractionFavoriteService favoriteService = mock(AttractionFavoriteService.class);
-        UserProfileService profileService = mock(UserProfileService.class);
         TravelDraftAttractionService attractionService = mock(TravelDraftAttractionService.class);
         ExploreService exploreService = mock(ExploreService.class);
         TravelDraftSessionService sessionService = mock(TravelDraftSessionService.class);
-        AmapService amapService = mock(AmapService.class);
-        when(amapService.searchPois(
-                anyString(),
-                anyString(),
-                anyInt()
-        )).thenThrow(new IllegalStateException("模拟高德不可用"));
 
         TravelPlan plan = new TravelPlan();
         plan.setId(12L);
@@ -66,12 +64,11 @@ class TravelAiGenerationServiceTests {
                 expiresAt
         );
 
+        when(workflowService.run(eq(7L), eq(12L), anyString()))
+                .thenReturn(completedWorkflow(aiPlan));
         when(planService.getMyPlanById(7L, 12L)).thenReturn(plan);
-        when(profileService.getProfile(7L)).thenReturn(null);
         when(favoriteService.list(7L)).thenReturn(List.of());
-        when(exploreService.listAttractions("南京", null, null))
-                .thenReturn(List.of());
-        when(deepSeekService.generateTravelPlan(anyString())).thenReturn(aiPlan);
+        when(exploreService.listAttractions("南京", null, null)).thenReturn(List.of());
         when(draftService.createDraft(plan, aiPlan)).thenReturn(draft);
         when(attractionService.enrichFromCatalog(
                 draft,
@@ -80,37 +77,33 @@ class TravelAiGenerationServiceTests {
         )).thenReturn(draft);
         when(sessionService.createSession(7L, 12L, draft)).thenReturn(session);
 
-        TravelDraftSessionResponse response =
-                new TravelAiGenerationService(
-                        planService,
-                        deepSeekService,
-                        draftService,
-                        favoriteService,
-                        profileService,
-                        attractionService,
-                        exploreService,
-                        sessionService
-                ).generateDraftSession(7L, 12L);
+        TravelDraftSessionResponse response = new TravelAiGenerationService(
+                planService,
+                workflowService,
+                draftService,
+                favoriteService,
+                attractionService,
+                exploreService,
+                sessionService
+        ).generateDraftSession(7L, 12L);
 
         assertEquals("draft-1", response.draftId());
         assertEquals(expiresAt, response.expiresAt());
         assertSame(draft, response.draft());
 
         InOrder order = inOrder(
+                workflowService,
                 planService,
-                profileService,
                 favoriteService,
                 exploreService,
-                deepSeekService,
                 draftService,
                 attractionService,
                 sessionService
         );
+        order.verify(workflowService).run(eq(7L), eq(12L), anyString());
         order.verify(planService).getMyPlanById(7L, 12L);
-        order.verify(profileService).getProfile(7L);
         order.verify(favoriteService).list(7L);
         order.verify(exploreService).listAttractions("南京", null, null);
-        order.verify(deepSeekService).generateTravelPlan(anyString());
         order.verify(draftService).createDraft(plan, aiPlan);
         order.verify(attractionService).enrichFromCatalog(
                 draft,
@@ -118,16 +111,14 @@ class TravelAiGenerationServiceTests {
                 java.util.Set.of()
         );
         order.verify(sessionService).createSession(7L, 12L, draft);
-        verifyNoInteractions(amapService);
     }
 
     @Test
-    void includesUserAdditionalRequirementsInPrompt() {
+    void passesAdditionalRequirementsIntoPlannerWorkflow() {
         TravelPlanService planService = mock(TravelPlanService.class);
-        DeepSeekService deepSeekService = mock(DeepSeekService.class);
+        PlannerWorkflowService workflowService = mock(PlannerWorkflowService.class);
         TravelPlanDraftService draftService = mock(TravelPlanDraftService.class);
         AttractionFavoriteService favoriteService = mock(AttractionFavoriteService.class);
-        UserProfileService profileService = mock(UserProfileService.class);
         TravelDraftAttractionService attractionService = mock(TravelDraftAttractionService.class);
         ExploreService exploreService = mock(ExploreService.class);
         TravelDraftSessionService sessionService = mock(TravelDraftSessionService.class);
@@ -135,21 +126,22 @@ class TravelAiGenerationServiceTests {
         TravelPlan plan = new TravelPlan();
         plan.setId(12L);
         plan.setDestination("厦门");
-        plan.setTravelDays(1);
-        TravelPlanDraft draft = new TravelPlanDraft();
         AiTravelPlanResponse aiPlan = new AiTravelPlanResponse();
+        TravelPlanDraft draft = new TravelPlanDraft();
         TravelDraftSession session = new TravelDraftSession(
                 "draft-2", 7L, 12L, draft,
                 LocalDateTime.now(), LocalDateTime.now().plusMinutes(30)
         );
+        ArgumentCaptor<String> requestCaptor = ArgumentCaptor.forClass(String.class);
 
+        when(workflowService.run(
+                org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq(12L),
+                requestCaptor.capture()
+        )).thenReturn(completedWorkflow(aiPlan));
         when(planService.getMyPlanById(7L, 12L)).thenReturn(plan);
-        when(profileService.getProfile(7L)).thenReturn(null);
         when(favoriteService.list(7L)).thenReturn(List.of());
         when(exploreService.listAttractions("厦门", null, null)).thenReturn(List.of());
-        org.mockito.ArgumentCaptor<String> promptCaptor =
-                org.mockito.ArgumentCaptor.forClass(String.class);
-        when(deepSeekService.generateTravelPlan(promptCaptor.capture())).thenReturn(aiPlan);
         when(draftService.createDraft(plan, aiPlan)).thenReturn(draft);
         when(attractionService.enrichFromCatalog(
                 draft, List.of(), java.util.Set.of()
@@ -157,17 +149,75 @@ class TravelAiGenerationServiceTests {
         when(sessionService.createSession(7L, 12L, draft)).thenReturn(session);
 
         new TravelAiGenerationService(
-                planService, deepSeekService, draftService,
-                favoriteService, profileService, attractionService,
-                exploreService, sessionService
+                planService,
+                workflowService,
+                draftService,
+                favoriteService,
+                attractionService,
+                exploreService,
+                sessionService
         ).generateDraftSession(
                 7L,
                 12L,
                 "第二天轻松一点，多安排收藏景点"
         );
 
-        assertTrue(promptCaptor.getValue().contains(
+        assertTrue(requestCaptor.getValue().contains(
                 "第二天轻松一点，多安排收藏景点"
         ));
+        verify(workflowService).run(7L, 12L, requestCaptor.getValue());
+    }
+
+    @Test
+    void doesNotCreateDraftWhenPlannerHasNoFinalPlan() {
+        TravelPlanService planService = mock(TravelPlanService.class);
+        PlannerWorkflowService workflowService = mock(PlannerWorkflowService.class);
+        TravelPlanDraftService draftService = mock(TravelPlanDraftService.class);
+        AttractionFavoriteService favoriteService = mock(AttractionFavoriteService.class);
+        TravelDraftAttractionService attractionService = mock(TravelDraftAttractionService.class);
+        ExploreService exploreService = mock(ExploreService.class);
+        TravelDraftSessionService sessionService = mock(TravelDraftSessionService.class);
+        PlannerWorkflowResponse failedWorkflow = new PlannerWorkflowResponse(
+                PlannerWorkflowStatus.PARTIAL_FAILURE,
+                1,
+                List.of(),
+                new PlannerWorkflowFacts(List.of(), List.of(), List.of()),
+                null,
+                "外部事实获取失败"
+        );
+        when(workflowService.run(eq(7L), eq(12L), anyString()))
+                .thenReturn(failedWorkflow);
+
+        TravelAiGenerationService service = new TravelAiGenerationService(
+                planService,
+                workflowService,
+                draftService,
+                favoriteService,
+                attractionService,
+                exploreService,
+                sessionService
+        );
+
+        assertThrows(ResponseStatusException.class,
+                () -> service.generateDraftSession(7L, 12L));
+        verifyNoInteractions(
+                planService,
+                draftService,
+                favoriteService,
+                attractionService,
+                exploreService,
+                sessionService
+        );
+    }
+
+    private PlannerWorkflowResponse completedWorkflow(AiTravelPlanResponse finalPlan) {
+        return new PlannerWorkflowResponse(
+                PlannerWorkflowStatus.COMPLETED,
+                0,
+                List.of(),
+                new PlannerWorkflowFacts(List.of(), List.of(), List.of()),
+                finalPlan,
+                null
+        );
     }
 }

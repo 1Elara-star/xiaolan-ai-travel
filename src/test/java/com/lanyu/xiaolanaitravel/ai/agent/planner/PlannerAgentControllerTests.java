@@ -21,7 +21,12 @@ class PlannerAgentControllerTests {
         TravelPlannerAgentService service = mock(TravelPlannerAgentService.class);
         PlannerWorkflowService workflowService = mock(PlannerWorkflowService.class);
         PlannerAgentStepResult expected = new PlannerAgentStepResult(
-                PlannerToolName.NONE, "不需要外部工具", null, null);
+                PlannerActionType.CALL_TOOL,
+                PlannerToolName.AMAP_POI_SEARCH,
+                "需要查询真实地点",
+                null,
+                null,
+                null);
         when(service.executeStep(7L, 12L, "帮我看看这趟旅行还缺什么"))
                 .thenReturn(expected);
         MockMvc mockMvc = MockMvcBuilders
@@ -35,8 +40,9 @@ class PlannerAgentControllerTests {
                                 {"userRequest":"帮我看看这趟旅行还缺什么"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.tool").value("NONE"))
-                .andExpect(jsonPath("$.reason").value("不需要外部工具"))
+                .andExpect(jsonPath("$.action").value("CALL_TOOL"))
+                .andExpect(jsonPath("$.tool").value("AMAP_POI_SEARCH"))
+                .andExpect(jsonPath("$.reason").value("需要查询真实地点"))
                 .andExpect(jsonPath("$.toolResult").doesNotExist());
 
         verify(service).executeStep(7L, 12L, "帮我看看这趟旅行还缺什么");
@@ -51,6 +57,7 @@ class PlannerAgentControllerTests {
                 1,
                 List.of(),
                 new PlannerWorkflowFacts(List.of(), List.of(), List.of()),
+                null,
                 null
         );
         when(workflowService.run(7L, 12L, "查清楚晚上怎么回酒店"))

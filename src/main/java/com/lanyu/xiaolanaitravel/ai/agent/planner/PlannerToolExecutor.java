@@ -43,9 +43,13 @@ public class PlannerToolExecutor {
         if (decision == null || decision.tool() == null) {
             throw new IllegalArgumentException("Planner Tool 决策不能为空");
         }
+        if (decision.action() != PlannerActionType.CALL_TOOL
+                || decision.tool() == PlannerToolName.NONE) {
+            throw new IllegalArgumentException("只有 CALL_TOOL 决策可以执行 Spring AI Tool");
+        }
 
         return switch (decision.tool()) {
-            case NONE -> null;
+            case NONE -> throw new IllegalArgumentException("NONE 不是可执行 Tool");
             case AMAP_POI_SEARCH -> call(
                     poiSearchCallback,
                     decision.poiSearch(),

@@ -16,6 +16,8 @@ import type {
   HotelCandidate,
   HotelSearchFilters,
   TravelPlanDraft,
+  TravelDraftSessionResponse,
+  TravelValidationIssue,
   TravelMode,
   TravelItemLocationResult,
   TravelPlan,
@@ -56,6 +58,8 @@ const locationResults = ref<Record<number, TravelItemLocationResult>>({})
 const generatedDraft = ref<TravelPlanDraft | null>(null)
 const draftExpiresAt = ref<string | null>(null)
 const draftId = ref<string | null>(null)
+const draftValidationIssues = ref<TravelValidationIssue[]>([])
+const draftHasErrors = ref(false)
 const savedItinerary = ref<HTMLElement | null>(null)
 const selectedHotelName = computed(
   () =>
@@ -148,6 +152,14 @@ function setMessage(value: string, type: 'success' | 'error' = 'success') {
   messageType.value = type
 }
 
+function applyDraftSession(result: TravelDraftSessionResponse) {
+  generatedDraft.value = result.draft
+  draftId.value = result.draftId
+  draftExpiresAt.value = result.expiresAt
+  draftValidationIssues.value = result.validationIssues ?? []
+  draftHasErrors.value = result.hasErrors ?? false
+}
+
 async function openNewItem() {
   editingItem.value = null
   showItemForm.value = true
@@ -219,9 +231,7 @@ async function generateWithAi(additionalRequirements?: string) {
     if (!result.draft) {
       throw new Error('后端仍在返回旧版行程格式，请在 IDEA 中停止后重新启动后端。')
     }
-    generatedDraft.value = result.draft
-    draftId.value = result.draftId
-    draftExpiresAt.value = result.expiresAt
+    applyDraftSession(result)
     setMessage(
       result.draft.summary ||
         `已生成 ${result.draft.travelDays} 天、${result.draft.items.length} 个节点的候选行程。`,
@@ -253,8 +263,7 @@ async function enrichGeneratedDraft() {
   enrichingDraft.value = true
   try {
     const result = await travelApi.enrichDraftMap(draftId.value)
-    generatedDraft.value = result.draft
-    draftExpiresAt.value = result.expiresAt
+    applyDraftSession(result)
     setMessage('候选地点和直线距离已更新。你仍然可以只选择满意的节点。')
   } catch (error) {
     setMessage(
@@ -315,13 +324,13 @@ async function adoptGeneratedItems(selectedKeys: string[]) {
     items.value = result.planItems
 
     if (result.draftSession) {
-      draftId.value = result.draftSession.draftId
-      draftExpiresAt.value = result.draftSession.expiresAt
-      generatedDraft.value = result.draftSession.draft
+      applyDraftSession(result.draftSession)
     } else {
       draftId.value = null
       draftExpiresAt.value = null
       generatedDraft.value = null
+      draftValidationIssues.value = []
+      draftHasErrors.value = false
     }
 
     setMessage(`已将 ${selectedKeys.length} 个候选节点加入详细行程，其他候选和已有节点没有被改动。`)
@@ -476,6 +485,8 @@ function parseCoordinate(value: string | null, min: number, max: number) {
           v-if="generatedDraft"
           :draft="generatedDraft"
           :expires-at="draftExpiresAt"
+          :validation-issues="draftValidationIssues"
+          :has-errors="draftHasErrors"
           :enriching="enrichingDraft"
           :adopting="adoptingDraft"
           :regenerating="generating"

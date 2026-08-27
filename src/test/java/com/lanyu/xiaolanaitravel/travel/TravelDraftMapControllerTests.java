@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -25,7 +26,9 @@ class TravelDraftMapControllerTests {
                 new TravelDraftSessionResponse(
                         "draft-1",
                         LocalDateTime.of(2026, 8, 20, 10, 30),
-                        new TravelPlanDraft()
+                        new TravelPlanDraft(),
+                        List.of(),
+                        false
                 );
         when(enrichmentService.enrichMap(7L, "draft-1"))
                 .thenReturn(expected);

@@ -4,6 +4,7 @@ import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftSession;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftConfirmationResponse;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftSessionResponse;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraftItem;
+import com.lanyu.xiaolanaitravel.travel.dto.TravelValidationIssue;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -20,12 +21,15 @@ public class TravelDraftConfirmationService {
 
     private final TravelDraftSessionService sessionService;
     private final TravelPlanItemService planItemService;
+    private final TravelPlanDraftValidationService validationService;
 
     public TravelDraftConfirmationService(
             TravelDraftSessionService sessionService,
-            TravelPlanItemService planItemService) {
+            TravelPlanItemService planItemService,
+            TravelPlanDraftValidationService validationService) {
         this.sessionService = sessionService;
         this.planItemService = planItemService;
+        this.validationService = validationService;
     }
 
     public TravelDraftConfirmationResponse confirm(
@@ -73,10 +77,14 @@ public class TravelDraftConfirmationService {
         if (session.getDraft().getItems().isEmpty()) {
             sessionService.removeSession(userId, draftId);
         } else {
+            List<TravelValidationIssue> validationIssues =
+                    validationService.validate(session.getDraft());
             remainingSession = new TravelDraftSessionResponse(
                     session.getDraftId(),
                     session.getExpiresAt(),
-                    session.getDraft()
+                    session.getDraft(),
+                    validationIssues,
+                    validationService.hasErrors(validationIssues)
             );
         }
 

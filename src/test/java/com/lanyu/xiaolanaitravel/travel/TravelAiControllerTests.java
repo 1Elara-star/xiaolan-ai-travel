@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -25,7 +26,9 @@ class TravelAiControllerTests {
                 new TravelDraftSessionResponse(
                         "draft-1",
                         LocalDateTime.of(2026, 8, 19, 12, 30),
-                        new TravelPlanDraft()
+                        new TravelPlanDraft(),
+                        List.of(),
+                        false
                 );
         when(generationService.generateDraftSession(7L, 12L, null))
                 .thenReturn(expected);

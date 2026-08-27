@@ -1,6 +1,7 @@
 package com.lanyu.xiaolanaitravel.travel.dto;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 返回给前端的候选行程会话。
@@ -10,6 +11,8 @@ import java.time.LocalDateTime;
 public record TravelDraftSessionResponse(
         String draftId,
         LocalDateTime expiresAt,
-        TravelPlanDraft draft
+        TravelPlanDraft draft,
+        List<TravelValidationIssue> validationIssues,
+        boolean hasErrors
 ) {
 }

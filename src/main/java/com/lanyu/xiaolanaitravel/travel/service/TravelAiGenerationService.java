@@ -11,6 +11,7 @@ import com.lanyu.xiaolanaitravel.favorite.service.AttractionFavoriteService;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftSession;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftSessionResponse;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraft;
+import com.lanyu.xiaolanaitravel.travel.dto.TravelValidationIssue;
 import com.lanyu.xiaolanaitravel.travel.entity.TravelPlan;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -31,7 +32,8 @@ import java.util.stream.Collectors;
  * 4. Planner 返回最终结构化旅行方案；
  * 5. 将 AI 结果转换为候选 TravelPlanDraft；
  * 6. 使用本地景点资料补充候选卡片；
- * 7. 创建内存 Draft Session 并返回给前端。
+ * 7. 执行本地固定 Workflow 校验；
+ * 8. 创建内存 Draft Session，并将 Draft 与校验问题返回前端。
  *
  * 当前流程不会保存正式 TravelPlanItem。
  * 地图真实数据由独立的 Draft 地图补全流程处理。
@@ -53,6 +55,8 @@ public class TravelAiGenerationService {
 
     private final TravelDraftSessionService travelDraftSessionService;
 
+    private final TravelPlanDraftValidationService draftValidationService;
+
     public TravelAiGenerationService(
             TravelPlanService travelPlanService,
             PlannerWorkflowService plannerWorkflowService,
@@ -60,7 +64,8 @@ public class TravelAiGenerationService {
             AttractionFavoriteService favoriteService,
             TravelDraftAttractionService draftAttractionService,
             ExploreService exploreService,
-            TravelDraftSessionService travelDraftSessionService) {
+            TravelDraftSessionService travelDraftSessionService,
+            TravelPlanDraftValidationService draftValidationService) {
 
         this.travelPlanService = travelPlanService;
         this.plannerWorkflowService = plannerWorkflowService;
@@ -69,6 +74,7 @@ public class TravelAiGenerationService {
         this.draftAttractionService = draftAttractionService;
         this.exploreService = exploreService;
         this.travelDraftSessionService = travelDraftSessionService;
+        this.draftValidationService = draftValidationService;
     }
 
     /**
@@ -157,11 +163,15 @@ public class TravelAiGenerationService {
         );
 
         /*
-         * 5. 创建临时候选行程会话。
+         * 5. 先执行不依赖外部服务的固定 Workflow 校验，
+         * 再创建临时候选行程会话。
          *
          * 此时 Draft 只包含 AI 候选内容，
          * 不依赖任何地图接口。
          */
+        List<TravelValidationIssue> validationIssues =
+                draftValidationService.validate(draft);
+
         TravelDraftSession session =
                 travelDraftSessionService.createSession(
                         userId,
@@ -172,7 +182,9 @@ public class TravelAiGenerationService {
         return new TravelDraftSessionResponse(
                 session.getDraftId(),
                 session.getExpiresAt(),
-                session.getDraft()
+                session.getDraft(),
+                validationIssues,
+                draftValidationService.hasErrors(validationIssues)
         );
     }
 

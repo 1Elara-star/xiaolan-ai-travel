@@ -170,6 +170,14 @@ public class TravelPlanDraftValidationService {
         return List.copyOf(issues);
     }
 
+    /**
+     * 判断校验结果中是否包含必须处理的错误。
+     */
+    public boolean hasErrors(List<TravelValidationIssue> issues) {
+        return issues != null && issues.stream()
+                .anyMatch(issue -> "ERROR".equals(issue.severity()));
+    }
+
     private void validateLocation(
             TravelPlanDraftItem item,
             String itemKey,

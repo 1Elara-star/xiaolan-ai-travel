@@ -208,10 +208,20 @@ export interface TravelPlanDraft {
   items: TravelPlanDraftItem[]
 }
 
+export interface TravelValidationIssue {
+  code: string
+  severity: 'WARNING' | 'ERROR'
+  draftItemKey: string | null
+  relatedDraftItemKey: string | null
+  message: string
+}
+
 export interface TravelDraftSessionResponse {
   draftId: string
   expiresAt: string
   draft: TravelPlanDraft
+  validationIssues: TravelValidationIssue[]
+  hasErrors: boolean
 }
 
 export interface TravelDraftConfirmationResponse {

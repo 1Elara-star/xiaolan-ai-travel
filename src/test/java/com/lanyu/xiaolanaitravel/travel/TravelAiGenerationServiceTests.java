@@ -10,11 +10,13 @@ import com.lanyu.xiaolanaitravel.favorite.service.AttractionFavoriteService;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftSession;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftSessionResponse;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraft;
+import com.lanyu.xiaolanaitravel.travel.dto.TravelValidationIssue;
 import com.lanyu.xiaolanaitravel.travel.entity.TravelPlan;
 import com.lanyu.xiaolanaitravel.travel.service.TravelAiGenerationService;
 import com.lanyu.xiaolanaitravel.travel.service.TravelDraftAttractionService;
 import com.lanyu.xiaolanaitravel.travel.service.TravelDraftSessionService;
 import com.lanyu.xiaolanaitravel.travel.service.TravelPlanDraftService;
+import com.lanyu.xiaolanaitravel.travel.service.TravelPlanDraftValidationService;
 import com.lanyu.xiaolanaitravel.travel.service.TravelPlanService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -47,6 +49,8 @@ class TravelAiGenerationServiceTests {
         TravelDraftAttractionService attractionService = mock(TravelDraftAttractionService.class);
         ExploreService exploreService = mock(ExploreService.class);
         TravelDraftSessionService sessionService = mock(TravelDraftSessionService.class);
+        TravelPlanDraftValidationService validationService =
+                mock(TravelPlanDraftValidationService.class);
 
         TravelPlan plan = new TravelPlan();
         plan.setId(12L);
@@ -75,7 +79,18 @@ class TravelAiGenerationServiceTests {
                 List.of(),
                 java.util.Set.of()
         )).thenReturn(draft);
+        List<TravelValidationIssue> issues = List.of(
+                new TravelValidationIssue(
+                        "TIME_CONFLICT",
+                        "ERROR",
+                        "D1-I2",
+                        "D1-I1",
+                        "两个行程节点的时间发生重叠"
+                )
+        );
         when(sessionService.createSession(7L, 12L, draft)).thenReturn(session);
+        when(validationService.validate(draft)).thenReturn(issues);
+        when(validationService.hasErrors(issues)).thenReturn(true);
 
         TravelDraftSessionResponse response = new TravelAiGenerationService(
                 planService,
@@ -84,12 +99,15 @@ class TravelAiGenerationServiceTests {
                 favoriteService,
                 attractionService,
                 exploreService,
-                sessionService
+                sessionService,
+                validationService
         ).generateDraftSession(7L, 12L);
 
         assertEquals("draft-1", response.draftId());
         assertEquals(expiresAt, response.expiresAt());
         assertSame(draft, response.draft());
+        assertSame(issues, response.validationIssues());
+        assertTrue(response.hasErrors());
 
         InOrder order = inOrder(
                 workflowService,
@@ -98,6 +116,7 @@ class TravelAiGenerationServiceTests {
                 exploreService,
                 draftService,
                 attractionService,
+                validationService,
                 sessionService
         );
         order.verify(workflowService).run(eq(7L), eq(12L), anyString());
@@ -110,6 +129,7 @@ class TravelAiGenerationServiceTests {
                 List.of(),
                 java.util.Set.of()
         );
+        order.verify(validationService).validate(draft);
         order.verify(sessionService).createSession(7L, 12L, draft);
     }
 
@@ -122,6 +142,8 @@ class TravelAiGenerationServiceTests {
         TravelDraftAttractionService attractionService = mock(TravelDraftAttractionService.class);
         ExploreService exploreService = mock(ExploreService.class);
         TravelDraftSessionService sessionService = mock(TravelDraftSessionService.class);
+        TravelPlanDraftValidationService validationService =
+                mock(TravelPlanDraftValidationService.class);
 
         TravelPlan plan = new TravelPlan();
         plan.setId(12L);
@@ -147,6 +169,7 @@ class TravelAiGenerationServiceTests {
                 draft, List.of(), java.util.Set.of()
         )).thenReturn(draft);
         when(sessionService.createSession(7L, 12L, draft)).thenReturn(session);
+        when(validationService.validate(draft)).thenReturn(List.of());
 
         new TravelAiGenerationService(
                 planService,
@@ -155,7 +178,8 @@ class TravelAiGenerationServiceTests {
                 favoriteService,
                 attractionService,
                 exploreService,
-                sessionService
+                sessionService,
+                validationService
         ).generateDraftSession(
                 7L,
                 12L,
@@ -177,6 +201,8 @@ class TravelAiGenerationServiceTests {
         TravelDraftAttractionService attractionService = mock(TravelDraftAttractionService.class);
         ExploreService exploreService = mock(ExploreService.class);
         TravelDraftSessionService sessionService = mock(TravelDraftSessionService.class);
+        TravelPlanDraftValidationService validationService =
+                mock(TravelPlanDraftValidationService.class);
         PlannerWorkflowResponse failedWorkflow = new PlannerWorkflowResponse(
                 PlannerWorkflowStatus.PARTIAL_FAILURE,
                 1,
@@ -195,7 +221,8 @@ class TravelAiGenerationServiceTests {
                 favoriteService,
                 attractionService,
                 exploreService,
-                sessionService
+                sessionService,
+                validationService
         );
 
         assertThrows(ResponseStatusException.class,
@@ -206,7 +233,8 @@ class TravelAiGenerationServiceTests {
                 favoriteService,
                 attractionService,
                 exploreService,
-                sessionService
+                sessionService,
+                validationService
         );
     }
 

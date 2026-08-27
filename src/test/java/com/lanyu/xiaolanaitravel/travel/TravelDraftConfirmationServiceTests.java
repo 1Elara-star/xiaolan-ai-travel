@@ -5,6 +5,7 @@ import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraft;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraftItem;
 import com.lanyu.xiaolanaitravel.travel.service.TravelDraftConfirmationService;
 import com.lanyu.xiaolanaitravel.travel.service.TravelDraftSessionService;
+import com.lanyu.xiaolanaitravel.travel.service.TravelPlanDraftValidationService;
 import com.lanyu.xiaolanaitravel.travel.service.TravelPlanItemService;
 import org.junit.jupiter.api.Test;
 
@@ -28,6 +29,8 @@ class TravelDraftConfirmationServiceTests {
                 mock(TravelDraftSessionService.class);
         TravelPlanItemService planItemService =
                 mock(TravelPlanItemService.class);
+        TravelPlanDraftValidationService validationService =
+                mock(TravelPlanDraftValidationService.class);
         TravelPlanDraftItem first = item("D1-I1", "鼓浪屿");
         TravelPlanDraftItem second = item("D1-I2", "植物园");
         TravelDraftSession session = session(first, second);
@@ -38,16 +41,19 @@ class TravelDraftConfirmationServiceTests {
                 org.mockito.ArgumentMatchers.eq(12L),
                 anyList()
         )).thenReturn(List.of());
+        when(validationService.validate(session.getDraft())).thenReturn(List.of());
 
         var response = new TravelDraftConfirmationService(
                 sessionService,
-                planItemService
+                planItemService,
+                validationService
         ).confirm(7L, "draft-1", List.of("D1-I2"));
 
         assertNotNull(response.draftSession());
         assertEquals(1, response.draftSession().draft().getItems().size());
         assertEquals("D1-I1", response.draftSession().draft()
                 .getItems().get(0).getDraftItemKey());
+        assertEquals(List.of(), response.draftSession().validationIssues());
         verify(planItemService).addFromDraft(
                 7L,
                 12L,
@@ -62,6 +68,8 @@ class TravelDraftConfirmationServiceTests {
                 mock(TravelDraftSessionService.class);
         TravelPlanItemService planItemService =
                 mock(TravelPlanItemService.class);
+        TravelPlanDraftValidationService validationService =
+                mock(TravelPlanDraftValidationService.class);
         TravelPlanDraftItem onlyItem = item("D1-I1", "鼓浪屿");
         when(sessionService.getMySession(7L, "draft-1"))
                 .thenReturn(session(onlyItem));
@@ -73,7 +81,8 @@ class TravelDraftConfirmationServiceTests {
 
         var response = new TravelDraftConfirmationService(
                 sessionService,
-                planItemService
+                planItemService,
+                validationService
         ).confirm(7L, "draft-1", List.of("D1-I1"));
 
         assertEquals(null, response.draftSession());

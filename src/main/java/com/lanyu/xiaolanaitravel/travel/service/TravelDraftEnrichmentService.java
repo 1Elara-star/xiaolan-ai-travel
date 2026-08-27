@@ -3,7 +3,10 @@ package com.lanyu.xiaolanaitravel.travel.service;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftSession;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelDraftSessionResponse;
 import com.lanyu.xiaolanaitravel.travel.dto.TravelPlanDraft;
+import com.lanyu.xiaolanaitravel.travel.dto.TravelValidationIssue;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /**
  * 对已经存在的候选行程 Session 补充地图事实数据。
@@ -15,12 +18,15 @@ public class TravelDraftEnrichmentService {
 
     private final TravelDraftSessionService sessionService;
     private final TravelDraftMapService mapService;
+    private final TravelPlanDraftValidationService validationService;
 
     public TravelDraftEnrichmentService(
             TravelDraftSessionService sessionService,
-            TravelDraftMapService mapService) {
+            TravelDraftMapService mapService,
+            TravelPlanDraftValidationService validationService) {
         this.sessionService = sessionService;
         this.mapService = mapService;
+        this.validationService = validationService;
     }
 
     /**
@@ -44,11 +50,15 @@ public class TravelDraftEnrichmentService {
 
         mapService.enrichLocations(draft);
         mapService.enrichStraightLineDistances(draft);
+        List<TravelValidationIssue> validationIssues =
+                validationService.validate(draft);
 
         return new TravelDraftSessionResponse(
                 session.getDraftId(),
                 session.getExpiresAt(),
-                draft
+                draft,
+                validationIssues,
+                validationService.hasErrors(validationIssues)
         );
     }
 }
